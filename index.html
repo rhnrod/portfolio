@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Portfolio</title>
+    <link rel="stylesheet" href="/global.css">
+</head>
+
+<body>
+    <a href="/" style="font-family: 'Maple Mono', monospace; position: absolute; top: 4%; left: 4%;"><span
+            class="keyword-color">func</span> (me
+        <span class="keyword-color">*</span>rhnrod)
+        <span class="func-color">portfolio</span>()
+        {
+    </a>
+    <main class="container{{if .IsReadView}} container-read{{end}}">
+        <aside>
+            <img id="avatar" src="/assets/images/avatar.png" alt="" />
+            <nav>
+                <ul class="navbar">
+                    <li><a href="/">Blog</a></li>
+                    <li><a href="">Projetos</a></li>
+                    <li><a href="">#100DaysOfGo</a></li>
+                </ul>
+            </nav>
+        </aside>
+
+        <div style="display: flex; flex-direction: column; width: 100%;">
+            {{if .IsReadView}}
+            <!-- Visão de Leitura do Post -->
+            <div class="post-layout">
+                <div class="post-content">
+                    <a href="/" style="text-decoration: none; color: coral;">← Voltar para home</a>
+                    <h1>{{.CurrentPost.Title}}</h1>
+                    <hr style="margin: 1em 0; border: 0; border-top: 1px solid #444;" />
+                    <div>
+                        {{.CurrentPost.Content}}
+                    </div>
+                </div>
+                <nav class="toc{{if not .TOC}} toc-empty{{end}}" aria-label="Table of contents">
+                    {{if .TOC}}
+                    <h2>Neste post</h2>
+                    <ul>
+                        {{range .TOC}}
+                        <li class="toc-level-{{.Level}}"><a href="#{{.ID}}">{{.Text}}</a></li>
+                        {{end}}
+                    </ul>
+                    {{end}}
+                </nav>
+            </div>
+            {{else}}
+            <!-- Visão da Home Page -->
+            <div style="display: flex; flex-direction: column;">
+                <h1>Olá, mundo!</h1>
+                <p style="padding-top: 1em;">
+                    Me chamo <span style="color: coral; font-size: large;">Rhuan Emanuel</span>, seja bem-vindo ao meu
+                    portfolio.
+                </p>
+            </div>
+            <div class="posts" style="margin-top: 2rem;">
+                <h2>Últimos posts</h2>
+                <ul>
+                    {{range .Posts}}
+                    <li style="margin-top: 0.5rem;">
+                        <a href="/posts/{{.Slug}}">{{.Title}}<sup style="font-family: 'Geist Mono', monospace;">
+                                ↗</sup></a>
+                    </li>
+                    {{else}}
+                    <p>Nenhum post encontrado.</p>
+                    {{end}}
+                </ul>
+            </div>
+            {{end}}
+        </div>
+    </main>
+    <p style="font-family: 'Maple Mono', monospace; position: fixed; bottom: 4%; right: 4%;">} </p>
+
+    <script>
+        function initPostPage() {
+            var toc = document.querySelector('.toc');
+            if (toc) {
+                var links = Array.prototype.slice.call(toc.querySelectorAll('a'));
+                var targets = [];
+                links.forEach(function (link) {
+                    var el = document.getElementById(link.getAttribute('href').slice(1));
+                    if (el) targets.push({ link: link, el: el });
+                });
+
+                function setActive(id) {
+                    links.forEach(function (link) {
+                        link.classList.toggle('active', link.getAttribute('href') === '#' + id);
+                    });
+                }
+
+                if (targets.length > 0) {
+                    var observer = new IntersectionObserver(function (entries) {
+                        entries.forEach(function (entry) {
+                            if (entry.isIntersecting) setActive(entry.target.id);
+                        });
+                    }, { rootMargin: '-20% 0px -70% 0px' });
+
+                    targets.forEach(function (t) { observer.observe(t.el); });
+                }
+            }
+
+            document.querySelectorAll('.code-copy').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    var code = btn.closest('.code-card').querySelector('code');
+                    var text = extractCodeText(code);
+                    if (text === null) return;
+
+                    function copied() {
+                        btn.classList.add('copied');
+                        setTimeout(function () { btn.classList.remove('copied'); }, 1500);
+                    }
+
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(text).then(copied, function () {
+                            fallbackCopy(text);
+                            copied();
+                        });
+                    } else {
+                        fallbackCopy(text);
+                        copied();
+                    }
+                });
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', initPostPage);
+        window.initPostPage = initPostPage;
+
+        function extractCodeText(code) {
+            if (!code) return null;
+
+            var table = code.querySelector('table');
+            if (table) {
+                return Array.prototype.map.call(table.querySelectorAll('tr'), function (row) {
+                    var cell = row.querySelector('td:last-child');
+                    return cell ? cell.innerText.replace(/\n$/, '') : '';
+                }).join('\n');
+            }
+
+            var lines = Array.prototype.slice.call(code.querySelectorAll('span[style*="display:flex"]'));
+            if (lines.length > 0) {
+                return lines.map(function (line) {
+                    return line.lastElementChild ? line.lastElementChild.innerText.replace(/\n$/, '') : '';
+                }).join('\n');
+            }
+
+            var clone = code.cloneNode(true);
+            clone.querySelectorAll('[style*="user-select:none"]').forEach(function (el) { el.remove(); });
+            return clone.innerText;
+        }
+
+        function fallbackCopy(text) {
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand('copy'); } catch (e) { }
+            document.body.removeChild(ta);
+        }
+    </script>
+    <script type="module" src="/assets/spa.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,506 @@
+@font-face {
+    font-family: "Maple Mono";
+    src: url("/assets/fonts/Maple Mono/MapleMono-NF-CN-Regular.ttf?v=3") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Maple Mono";
+    src: url("/assets/fonts/Maple Mono/MapleMono-NF-CN-Medium.ttf?v=3") format("truetype");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Maple Mono";
+    src: url("/assets/fonts/Maple Mono/MapleMono-NF-CN-SemiBold.ttf?v=3") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Maple Mono";
+    src: url("/assets/fonts/Maple Mono/MapleMono-NF-CN-Bold.ttf?v=3") format("truetype");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Noto Sans";
+    src: url("/assets/fonts/Noto Sans/NotoSans-Regular.ttf?v=1") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Noto Sans";
+    src: url("/assets/fonts/Noto Sans/NotoSans-Medium.ttf?v=1") format("truetype");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Noto Sans";
+    src: url("/assets/fonts/Noto Sans/NotoSans-SemiBold.ttf?v=1") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Noto Sans";
+    src: url("/assets/fonts/Noto Sans/NotoSans-Bold.ttf?v=1") format("truetype");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/assets/fonts/Geist Mono/GeistMono-Regular.ttf?v=3") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/assets/fonts/Geist Mono/GeistMono-Medium.ttf?v=3") format("truetype");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/assets/fonts/Geist Mono/GeistMono-SemiBold.ttf?v=3") format("truetype");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Geist Mono";
+    src: url("/assets/fonts/Geist Mono/GeistMono-Bold.ttf?v=3") format("truetype");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --keyword-accent: #FF7B72;
+    --func-accent: #D2A8FF;
+    --string-accent: #A5D6FF;
+    user-select: none;
+}
+
+* {
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+    text-decoration: none;
+
+}
+
+.keyword-color {
+    color: var(--keyword-accent)
+}
+
+.string-color {
+    color: var(--string-accent);
+}
+
+.func-color {
+    color: var(--func-accent);
+    font-weight: bold;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: "Noto Sans", sans-serif;
+    background-color: #282828;
+    color: #fefefe;
+}
+
+h1 {
+    font-family: "Noto Sans", sans-serif;
+    font-weight: 400;
+}
+
+a {
+    color: #fefefe;
+}
+
+main {
+    display: flex;
+    text-decoration: none;
+}
+
+.container {
+    max-width: 1024px;
+    margin: 0 auto;
+    padding: 4em;
+}
+
+.navbar {
+    display: flex;
+    min-width: 12em;
+    font-size: 1.26em;
+    align-items: center;
+    justify-content: center;
+    gap: 1em;
+}
+
+.navbar>li {
+    list-style-type: none;
+}
+
+#avatar {
+    border-radius: 16px;
+    padding: 8px;
+    min-width: 1em;
+}
+
+.posts>h2 {
+    margin: 8px 0px;
+}
+
+h3 {
+    font-size: 18px;
+    text-transform: uppercase;
+}
+
+/* Layout de leitura: conteúdo à esquerda, TOC fixo à direita */
+.container-read {
+    max-width: 1200px;
+}
+
+/* Na leitura, o aside é posicionado à esquerda, alinhado com o "func (me *rhnrod) portfolio() {" */
+.container-read aside {
+    position: absolute;
+    top: calc(4% + 2.5rem);
+    left: 4%;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75em;
+}
+
+.container-read #avatar {
+    width: 5rem;
+    height: 5rem;
+    padding: 4px;
+}
+
+.container-read .navbar {
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 0.5em;
+}
+
+.container-read .post-layout {
+    margin-left: 13rem;
+}
+
+.post-layout {
+    display: flex;
+    align-items: flex-start;
+    gap: 3rem;
+    width: 100%;
+}
+
+.post-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.post-content h1 {
+    margin-top: 0.5em;
+}
+
+.post-content h2,
+.post-content h3,
+.post-content h4,
+.post-content h5,
+.post-content h6 {
+    scroll-margin-top: 1.5rem;
+}
+
+/* Tabela de Conteúdos */
+.toc {
+    position: sticky;
+    top: 2rem;
+    flex-shrink: 0;
+    width: 240px;
+    max-height: calc(100vh - 4rem);
+    overflow-y: auto;
+    padding-left: 1.25rem;
+    border-left: 1px solid #444;
+    font-size: 0.9rem;
+}
+
+.toc>h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #aaa;
+    margin-bottom: 0.75rem;
+}
+
+.toc ul {
+    list-style: none;
+}
+
+.toc li {
+    margin: 0.4rem 0;
+    line-height: 1.35;
+}
+
+.toc a {
+    color: #ccc;
+    transition: color 0.15s ease;
+}
+
+.toc a:hover {
+    color: #fefefe;
+}
+
+.toc a.active {
+    color: coral;
+}
+
+/* TOC vazio: reserva a coluna, mas sem borda vertical "órfã" */
+.toc.toc-empty {
+    border-left: none;
+}
+
+/* Indentação proporcional ao nível do heading */
+.toc-level-1 {
+    padding-left: 0;
+}
+
+.toc-level-2 {
+    padding-left: 0.75rem;
+}
+
+.toc-level-3 {
+    padding-left: 1.5rem;
+}
+
+.toc-level-4 {
+    padding-left: 2.25rem;
+}
+
+.toc-level-5 {
+    padding-left: 3rem;
+}
+
+.toc-level-6 {
+    padding-left: 3.75rem;
+}
+
+@media (max-width: 900px) {
+    .post-layout {
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    .toc {
+        position: static;
+        width: 100%;
+        max-height: none;
+        border-left: none;
+        border-top: 1px solid #444;
+        padding-left: 0;
+        padding-top: 1rem;
+        order: 2;
+    }
+
+    .toc.toc-empty {
+        display: none;
+    }
+
+    .container-read aside {
+        position: static;
+        top: auto;
+        left: auto;
+        margin-bottom: 1.5rem;
+    }
+
+    .container-read .post-layout {
+        margin-left: 0;
+    }
+}
+
+/* Personalização de card de código */
+/* Card principal do código */
+.code-card {
+    background-color: #0d1117;
+    /* Fundo padrão do GitHub Dark */
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    margin: 1.5rem 0;
+    overflow: hidden;
+    font-family: "Maple Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    font-size: 0.9rem;
+    /* Ligatures ativas conforme assets/fonts/config.json (ligature: true) */
+    font-variant-ligatures: common-ligatures;
+    font-feature-settings: "liga" 1, "calt" 1;
+}
+
+/* Barra superior (Titlebar) */
+.code-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: #161b22;
+    padding: 10px 16px;
+    border-bottom: 1px solid #30363d;
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    color: #c9d1d9;
+    font-size: 0.85rem;
+    width: 100%;
+}
+
+/* Ícone do arquivo na Titlebar */
+.code-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+}
+
+/* Nome do arquivo na Titlebar */
+.code-title {
+    font-weight: 500;
+}
+
+/* Ajustes no bloco de código e números de linha gerados pelo Chroma */
+.code-card pre {
+    margin: 0;
+    padding: 16px 0;
+    overflow-x: auto;
+    background-color: transparent !important;
+    font-family: "Maple Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    /* line-height 1.0 conforme assets/fonts/config.json */
+    line-height: 1;
+}
+
+.code-card code {
+    background-color: transparent !important;
+    font-family: "Maple Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
+    white-space: pre;
+    user-select: text;
+}
+
+.code-card code::selection {
+    background-color: #1f5279;
+    color: inherit;
+}
+
+/* O Chroma gera os números de linha usando tabelas (Table layout) */
+.code-card table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+}
+
+.code-card td {
+    padding: 0;
+    border: none;
+    background: transparent !important;
+}
+
+/* Coluna dos números de linha */
+.code-card td:first-child {
+    text-align: right;
+    padding-right: 16px;
+    padding-left: 16px;
+    user-select: none;
+    /* Impede que o usuário selecione os números ao copiar o código */
+    color: #6e7681;
+    /* Cor cinza sutil típica do GitHub */
+    border-right: 1px solid #30363d;
+    width: 1%;
+    /* Força a coluna a ocupar o mínimo espaço necessário */
+    white-space: nowrap;
+}
+
+/* Coluna do conteúdo do código */
+.code-card td:last-child {
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+/* Botão de copiar no canto superior direito, visível apenas no hover do bloco */
+.code-header .code-copy {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: auto;
+    padding: 4px 6px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: #c9d1d9;
+    cursor: pointer;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s ease, visibility 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.code-header .code-copy:hover,
+.code-header .code-copy:focus-visible {
+    background-color: #21262d;
+    border-color: #30363d;
+    color: #fefefe;
+}
+
+.code-header .code-copy:focus-visible {
+    outline: 1px solid coral;
+    outline-offset: 1px;
+}
+
+.code-card:hover .code-copy,
+.code-copy:focus-visible {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Feedback de cópia: troca o ícone por um check */
+.code-copy .copy-ok {
+    display: none;
+}
+
+.code-copy.copied .copy-icon {
+    display: none;
+}
+
+.code-copy.copied .copy-ok {
+    display: inline;
+    color: #7ee787;
+}
+
+ul li {
+    text-decoration: none;
+    list-style-type: none;
+    opacity: 0.8;
+}
+
+ul li:hover {
+    opacity: 1;
+    transition: all ease-in-out 0.3s;
+}
+
+code>span {
+    padding: 1px 0;
+}
