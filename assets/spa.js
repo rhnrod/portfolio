@@ -29,6 +29,11 @@ function isReadView(main) {
     return main.classList.contains("container-read");
 }
 
+function scrollToHash(id) {
+    const target = document.getElementById(id);
+    if (target) target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+}
+
 function measureAside(aside) {
     const avatar = aside.querySelector("#avatar");
     const items = Array.prototype.slice.call(aside.querySelectorAll(".navbar li"));
@@ -130,8 +135,7 @@ async function navigate(path, { push = true, force = false } = {}) {
 
     const hash = location.hash;
     if (hash && hash.length > 1) {
-        const target = document.getElementById(hash.slice(1));
-        if (target) target.scrollIntoView();
+        scrollToHash(hash.slice(1));
     }
 }
 
@@ -154,11 +158,8 @@ document.addEventListener("click", (e) => {
         e.preventDefault();
         const id = href.slice(1);
         if (id) {
-            const target = document.getElementById(id);
-            if (target) {
-                target.scrollIntoView();
-                history.replaceState(null, "", href);
-            }
+            scrollToHash(id);
+            history.replaceState(null, "", href);
         }
         return;
     }
@@ -193,6 +194,6 @@ const initialHash = location.hash;
 if (initialHash) {
     const target = document.getElementById(initialHash.slice(1));
     if (target) {
-        requestAnimationFrame(() => requestAnimationFrame(() => target.scrollIntoView()));
+        requestAnimationFrame(() => requestAnimationFrame(() => scrollToHash(initialHash.slice(1))));
     }
 }
