@@ -127,6 +127,12 @@ async function navigate(path, { push = true, force = false } = {}) {
     window.scrollTo(0, 0);
 
     if (window.initPostPage) window.initPostPage();
+
+    const hash = location.hash;
+    if (hash && hash.length > 1) {
+        const target = document.getElementById(hash.slice(1));
+        if (target) target.scrollIntoView();
+    }
 }
 
 document.addEventListener("click", (e) => {
@@ -139,7 +145,23 @@ document.addEventListener("click", (e) => {
     if (a.hasAttribute("download")) return;
 
     const href = a.getAttribute("href");
-    if (href === null || href.charAt(0) === "#") return;
+    if (href === null) return;
+
+    // Âncora interna (#foo): o fragment scroll nativo não rola o scroller
+    // aninhado quando o root está travado em 100vh (e trava o container),
+    // então rolamos manualmente e só atualizamos o hash via replaceState.
+    if (href.charAt(0) === "#") {
+        e.preventDefault();
+        const id = href.slice(1);
+        if (id) {
+            const target = document.getElementById(id);
+            if (target) {
+                target.scrollIntoView();
+                history.replaceState(null, "", href);
+            }
+        }
+        return;
+    }
 
     // Placeholders (Projetos, #100DaysOfGo): sem navegação
     if (href === "") {
@@ -158,7 +180,7 @@ document.addEventListener("click", (e) => {
     if (url.protocol !== "http:" && url.protocol !== "https:") return;
 
     e.preventDefault();
-    navigate(url.pathname + url.search, { push: true });
+    navigate(url.pathname + url.search + url.hash, { push: true });
 });
 
 window.addEventListener("popstate", () => {
@@ -166,3 +188,11 @@ window.addEventListener("popstate", () => {
 });
 
 if ("scrollRestoration" in history) history.scrollRestoration = "manual";
+
+const initialHash = location.hash;
+if (initialHash) {
+    const target = document.getElementById(initialHash.slice(1));
+    if (target) {
+        requestAnimationFrame(() => requestAnimationFrame(() => target.scrollIntoView()));
+    }
+}

@@ -183,6 +183,21 @@ h3 {
 /* Layout de leitura: conteúdo à esquerda, TOC fixo à direita */
 .container-read {
     max-width: 1200px;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+}
+
+/* Na leitura, apenas a área de texto rola; laterais ficam fixas */
+.container-read .post-content {
+    max-height: calc(100vh - 8em);
+    max-height: calc(100dvh - 8em);
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+
+.container-read .post-content::-webkit-scrollbar {
+    display: none;
 }
 
 /* Na leitura, o aside é posicionado à esquerda, alinhado com o "func (me *rhnrod) portfolio() {" */
@@ -210,6 +225,7 @@ h3 {
 
 .container-read .post-layout {
     margin-left: 13rem;
+    width: calc(100% - 13rem);
 }
 
 .post-layout {
@@ -244,6 +260,7 @@ h3 {
     width: 240px;
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
+    scrollbar-width: none;
     padding-left: 1.25rem;
     border-left: 1px solid #444;
     font-size: 0.9rem;
@@ -255,6 +272,10 @@ h3 {
     letter-spacing: 0.08em;
     color: #aaa;
     margin-bottom: 0.75rem;
+}
+
+.toc::-webkit-scrollbar {
+    display: none;
 }
 
 .toc ul {
@@ -310,6 +331,17 @@ h3 {
 }
 
 @media (max-width: 900px) {
+    .container-read {
+        height: auto;
+        overflow: visible;
+        flex-direction: column;
+    }
+
+    .container-read .post-content {
+        max-height: none;
+        overflow: visible;
+    }
+
     .post-layout {
         flex-direction: column;
         gap: 2rem;
@@ -339,6 +371,7 @@ h3 {
 
     .container-read .post-layout {
         margin-left: 0;
+        width: auto;
     }
 }
 
@@ -393,6 +426,32 @@ h3 {
     font-family: "Maple Mono", ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, Liberation Mono, monospace;
     /* line-height 1.0 conforme assets/fonts/config.json */
     line-height: 1;
+    /* Scrollbar no estilo VSCode (Firefox) */
+    scrollbar-width: thin;
+    scrollbar-color: rgba(110, 118, 129, 0.4) transparent;
+}
+
+/* Scrollbar no estilo VSCode (Chrome/Edge/Safari) */
+.code-card pre::-webkit-scrollbar {
+    height: 10px;
+}
+
+.code-card pre::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.code-card pre::-webkit-scrollbar-thumb {
+    background-color: rgba(110, 118, 129, 0.4);
+    border-radius: 5px;
+    border: 2px solid #0d1117;
+}
+
+.code-card pre::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(110, 118, 129, 0.7);
+}
+
+.code-card pre::-webkit-scrollbar-corner {
+    background: transparent;
 }
 
 .code-card code {
@@ -407,38 +466,22 @@ h3 {
     color: inherit;
 }
 
-/* O Chroma gera os números de linha usando tabelas (Table layout) */
-.code-card table {
-    width: 100%;
-    border-collapse: collapse;
-    border-spacing: 0;
-}
-
-.code-card td {
-    padding: 0;
-    border: none;
-    background: transparent !important;
-}
-
-/* Coluna dos números de linha */
-.code-card td:first-child {
+/* O Chroma gera cada linha como um wrapper display:flex contendo o número
+   (span com user-select:none) seguido do código. O número fica fixo (sticky)
+   na borda esquerda durante a rolagem horizontal. */
+.code-card code > span[style*="display:flex"] > span[style*="user-select:none"] {
+    position: sticky;
+    left: 0;
+    display: inline-block;
+    z-index: 1;
+    background-color: #0d1117;
+    min-width: 2.5em;
     text-align: right;
-    padding-right: 16px;
-    padding-left: 16px;
-    user-select: none;
-    /* Impede que o usuário selecione os números ao copiar o código */
-    color: #6e7681;
-    /* Cor cinza sutil típica do GitHub */
+    /* Override dos estilos inline do Chroma: sem ele sobra uma fresta transparente */
+    margin-right: 0 !important;
+    padding: 0 1em 0 1em !important;
     border-right: 1px solid #30363d;
-    width: 1%;
-    /* Força a coluna a ocupar o mínimo espaço necessário */
-    white-space: nowrap;
-}
-
-/* Coluna do conteúdo do código */
-.code-card td:last-child {
-    padding-left: 16px;
-    padding-right: 16px;
+    user-select: none;
 }
 
 /* Botão de copiar no canto superior direito, visível apenas no hover do bloco */
