@@ -200,6 +200,29 @@ h3 {
     display: none;
 }
 
+/* O texto do post surge com um breve delay e fade suave */
+.container-read .post-content {
+    opacity: 0;
+    animation: post-fade-in 0.4s ease-out 0.2s forwards;
+}
+
+@keyframes post-fade-in {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .container-read .post-content {
+        opacity: 1;
+        animation: none;
+    }
+}
+
 /* Na leitura, o aside é posicionado à esquerda, alinhado com o "func (me *rhnrod) portfolio() {" */
 .container-read aside {
     position: absolute;
@@ -541,4 +564,8 @@ ul li {
 ul li:hover {
     opacity: 1;
     transition: all ease-in-out 0.3s;
+}
+
+.left-bar {
+    z-index: 999 !important;
 }
