@@ -555,6 +555,18 @@ h3 {
     color: #7ee787;
 }
 
+.icons {
+    opacity: 0.8;
+    width: 28px;
+    height: 28px;
+    cursor: pointer;
+    transition: all ease-in-out 0.3s;
+}
+
+.icons:hover {
+    opacity: 1;
+}
+
 ul li {
     text-decoration: none;
     list-style-type: none;

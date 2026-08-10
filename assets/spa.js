@@ -37,9 +37,11 @@ function scrollToHash(id) {
 function measureAside(aside) {
     const avatar = aside.querySelector("#avatar");
     const items = Array.prototype.slice.call(aside.querySelectorAll(".navbar li"));
+    const iconsRow = aside.querySelector(".icons-row");
     return {
         avatar: avatar ? avatar.getBoundingClientRect() : null,
         items: items.map((li) => li.getBoundingClientRect()),
+        iconsRow: iconsRow ? iconsRow.getBoundingClientRect() : null,
     };
 }
 
@@ -126,6 +128,11 @@ async function navigate(path, { push = true, force = false } = {}) {
                 flipItem(li, before.items[i], after.items[i]);
             }
         });
+
+        const iconsRow = aside.querySelector(".icons-row");
+        if (iconsRow && before.iconsRow && after.iconsRow) {
+            flipItem(iconsRow, before.iconsRow, after.iconsRow);
+        }
     }
 
     if (push) history.pushState({ path }, "", path);
