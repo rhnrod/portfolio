@@ -5,6 +5,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portfolio</title>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
+        integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
+        crossorigin="anonymous"></script>
     <script src="https://kit.fontawesome.com/a232b780ff.js" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/global.css">
 </head>
@@ -26,11 +29,21 @@
                     <li><a href="">#100DaysOfGo</a></li>
                 </ul>
             </nav>
+            <!-- Social Icons -->
             <div class="icons-row" style="display: inline-flex; gap: 1px; margin-top: 4px;">
                 <i class="icons fa-brands fa-square-github"></i>
                 <i class="icons fa-brands fa-square-linkedin"></i>
                 <i class="icons fa-brands fa-square-instagram"></i>
+                <i class="icons fa-brands fa-square-lastfm"></i>
+                <i class="icons fa-brands fa-square-youtube"></i>
                 <!-- <i class="icons fa-solid fa-square-rss"></i> -->
+            </div>
+            <!-- Last.fm Musics -->
+            <div class="last-fm">
+                <p style="margin:8px 0px 4px 0px;"><i class="fa-brands fa-spotify"></i> Músicas recentes</p>
+                <div hx-get="/api/lastfm-widget?index=0" hx-trigger="load">
+                    Carregando playlist...
+                </div>
             </div>
         </aside>
 
@@ -38,12 +51,43 @@
             {{if .IsReadView}}
             <!-- Visão de Leitura do Post -->
             <div class="post-layout">
-                <div class="post-content">
-                    <a href="/" style="text-decoration: none; color: coral;">← Voltar para home</a>
-                    <h1>{{.CurrentPost.Title}}</h1>
-                    <hr style="margin: 1em 0; border: 0; border-top: 1px solid #444;" />
-                    <div>
-                        {{.CurrentPost.Content}}
+                <div class="post-scroll">
+                    <div class="post-scroll-shadow top"></div>
+                    <div class="post-scroll-shadow bottom"></div>
+                    <div class="post-content">
+                        <a href="/" style="text-decoration: none; color: coral;">← Voltar para home</a>
+                        <h1>{{.CurrentPost.Title}}</h1>
+                        <div class="post-meta">
+                            {{if .CurrentPost.DateISO}}
+                            <span class="post-date" data-datetime="{{.CurrentPost.DateISO}}"
+                                title="{{.CurrentPost.DateTooltip}}"></span>
+                            {{else}}
+                            <span class="post-date">{{.CurrentPost.Date}}</span>
+                            {{end}}
+                            <span class="post-read-time"><i class="fa-solid fa-clock"></i> {{.CurrentPost.ReadTime}} min de
+                                leitura</span>
+                        </div>
+                        {{if .CurrentPost.Thumbnail}}
+                        <img class="post-thumbnail" src="{{.CurrentPost.Thumbnail}}" alt="{{.CurrentPost.Title}}">
+                        {{end}}
+                        <hr style="margin: 1em 0; border: 0; border-top: 1px solid #444;" />
+                        <div class="post-body">
+                            {{.CurrentPost.Content}}
+                        </div>
+                        <div class="post-nav">
+                            {{if .PrevPost}}
+                            <a class="post-nav-link" href="/posts/{{.PrevPost.Slug}}">
+                                <span class="post-nav-label">← Post anterior</span>
+                                <span class="post-nav-title">{{.PrevPost.Title}}</span>
+                            </a>
+                            {{end}}
+                            {{if .NextPost}}
+                            <a class="post-nav-link next" href="/posts/{{.NextPost.Slug}}">
+                                <span class="post-nav-label">Próximo post →</span>
+                                <span class="post-nav-title">{{.NextPost.Title}}</span>
+                            </a>
+                            {{end}}
+                        </div>
                     </div>
                 </div>
                 <nav class="toc{{if not .TOC}} toc-empty{{end}}" aria-label="Table of contents">
@@ -102,13 +146,25 @@
                 }
 
                 if (targets.length > 0) {
+                    var scroller = document.querySelector('.container-read .post-content');
                     var observer = new IntersectionObserver(function (entries) {
                         entries.forEach(function (entry) {
                             if (entry.isIntersecting) setActive(entry.target.id);
                         });
-                    }, { rootMargin: '-20% 0px -70% 0px' });
+                    }, { root: scroller || null, rootMargin: '0px 0px -90% 0px' });
 
                     targets.forEach(function (t) { observer.observe(t.el); });
+
+                    var lastLink = links[links.length - 1];
+                    var lastId = lastLink ? lastLink.getAttribute('href').slice(1) : null;
+                    if (scroller && lastId) {
+                        scroller.addEventListener('scroll', function () {
+                            if (scroller.scrollTop > 0 &&
+                                scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 4) {
+                                setActive(lastId);
+                            }
+                        }, { passive: true });
+                    }
                 }
             }
 
@@ -134,10 +190,63 @@
                     }
                 });
             });
+
+            initRelativeDates();
+            initScrollShadows();
         }
 
         document.addEventListener('DOMContentLoaded', initPostPage);
         window.initPostPage = initPostPage;
+        setInterval(initRelativeDates, 60000);
+
+        function relativeTime(iso) {
+            var then = new Date(iso);
+            if (isNaN(then.getTime())) return null;
+            var diff = Date.now() - then.getTime();
+            if (diff < 60000) return "Agora";
+            var m = Math.floor(diff / 60000);
+            if (m < 60) return "Há " + m + (m === 1 ? " minuto" : " minutos");
+            var h = Math.floor(m / 60);
+            if (h < 24) return "Há " + h + (h === 1 ? " hora" : " horas");
+            var d = Math.floor(h / 24);
+            if (d < 30) return "Há " + d + (d === 1 ? " dia" : " dias");
+            var mo = Math.floor(d / 30);
+            if (mo < 12) return "Há " + mo + (mo === 1 ? " mês" : " meses");
+            var y = Math.floor(mo / 12);
+            return "Há " + y + (y === 1 ? " ano" : " anos");
+        }
+
+        function initRelativeDates() {
+            document.querySelectorAll('.post-date[data-datetime]').forEach(function (el) {
+                var label = relativeTime(el.getAttribute('data-datetime'));
+                if (label !== null) el.textContent = label;
+            });
+        }
+
+        function initScrollShadows() {
+            var scroller = document.querySelector('.container-read .post-content');
+            if (!scroller) return;
+            var wrap = scroller.parentElement;
+            var topShadow = wrap.querySelector('.post-scroll-shadow.top');
+            var bottomShadow = wrap.querySelector('.post-scroll-shadow.bottom');
+            if (!topShadow || !bottomShadow) return;
+
+            function update() {
+                var canUp = scroller.scrollTop > 1;
+                var canDown = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 2;
+                topShadow.classList.toggle('visible', canUp);
+                bottomShadow.classList.toggle('visible', canDown);
+            }
+
+            scroller.addEventListener('scroll', update, { passive: true });
+            if (typeof ResizeObserver !== 'undefined') {
+                var ro = new ResizeObserver(update);
+                ro.observe(scroller);
+                var body = scroller.querySelector('.post-body');
+                if (body) ro.observe(body);
+            }
+            update();
+        }
 
         function extractCodeText(code) {
             if (!code) return null;
@@ -173,7 +282,7 @@
             document.body.removeChild(ta);
         }
     </script>
-    <script type="module" src="/assets/spa.js"></script>
+    <script type="module" src="/scripts/spa.js"></script>
 </body>
 
 </html>

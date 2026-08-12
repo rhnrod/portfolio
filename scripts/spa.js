@@ -31,17 +31,26 @@ function isReadView(main) {
 
 function scrollToHash(id) {
     const target = document.getElementById(id);
-    if (target) target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+    if (!target) return;
+    const scroller = target.closest(".post-content");
+    if (!scroller) {
+        target.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
+        return;
+    }
+    const top = target.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    scroller.scrollTo({ top, behavior: reduceMotion ? "auto" : "smooth" });
 }
 
 function measureAside(aside) {
     const avatar = aside.querySelector("#avatar");
     const items = Array.prototype.slice.call(aside.querySelectorAll(".navbar li"));
     const iconsRow = aside.querySelector(".icons-row");
+    const lastFm = aside.querySelector(".last-fm");
     return {
         avatar: avatar ? avatar.getBoundingClientRect() : null,
         items: items.map((li) => li.getBoundingClientRect()),
         iconsRow: iconsRow ? iconsRow.getBoundingClientRect() : null,
+        lastFm: lastFm ? lastFm.getBoundingClientRect() : null,
     };
 }
 
@@ -132,6 +141,11 @@ async function navigate(path, { push = true, force = false } = {}) {
         const iconsRow = aside.querySelector(".icons-row");
         if (iconsRow && before.iconsRow && after.iconsRow) {
             flipItem(iconsRow, before.iconsRow, after.iconsRow);
+        }
+
+        const lastFm = aside.querySelector(".last-fm");
+        if (lastFm && before.lastFm && after.lastFm) {
+            flipItem(lastFm, before.lastFm, after.lastFm);
         }
     }
 

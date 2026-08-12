@@ -2,44 +2,97 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"io"
 	"log"
 	"mime"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
 	chromahtml "github.com/alecthomas/chroma/v2/formatters/html"
+	"github.com/joho/godotenv"
 	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/ast"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
+	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"gopkg.in/yaml.v3"
 )
 
-// Frontmatter mapeia os dados do cabeçalho do Markdown
+// --- Structs Last.fm ---
+type LastFmResponse struct {
+	RecentTracks struct {
+		Track []Track `json:"track"`
+	} `json:"recenttracks"`
+}
+
+type Track struct {
+	Name   string `json:"name"`
+	Artist struct {
+		Name string `json:"name"`
+		Text string `json:"#text"`
+	} `json:"artist"`
+	Album struct {
+		Name string `json:"name"`
+		Text string `json:"#text"`
+	} `json:"album"`
+	Duration string  `json:"duration"`
+	Image    []Image `json:"image"`
+	Attr     *Attr   `json:"@attr,omitempty"`
+}
+
+type Image struct {
+	Size string `json:"size"`
+	Text string `json:"#text"`
+}
+
+type Attr struct {
+	NowPlaying string `json:"nowplaying"`
+}
+
+type SongInfo struct {
+	Title      string
+	Artist     string
+	Album      string
+	Duration   string
+	CoverURL   string
+	NowPlaying bool
+}
+
+// Instância global do cache (será inicializada no main após carregar o .env)
+var lastFmCache *LastFMCache
+
+// --- Estruturas originais ---
 type Frontmatter struct {
-	Title    string `yaml:"title"`
-	Date     string `yaml:"date"`
-	LastDate string `yaml:"last-date"`
-	Author   string `yaml:"author"`
+	Title     string `yaml:"title"`
+	Date      string `yaml:"date"`
+	LastDate  string `yaml:"last-date"`
+	Author    string `yaml:"author"`
+	Thumbnail string `yaml:"thumbnail"`
 }
 
 type Post struct {
-	Title   string
-	Slug    string
-	Date    string
-	Author  string
-	Content template.HTML
+	Title       string
+	Slug        string
+	Date        string
+	DateISO     string
+	DateTooltip string
+	Author      string
+	Thumbnail   string
+	ReadTime    int
+	File        string
+	Content     template.HTML
 }
 
-// TOCItem representa um item da tabela de conteúdos gerada a partir dos títulos do Markdown
 type TOCItem struct {
 	ID    string
 	Text  string
@@ -49,11 +102,12 @@ type TOCItem struct {
 type PageData struct {
 	Posts       []Post
 	CurrentPost *Post
+	PrevPost    *Post
+	NextPost    *Post
 	TOC         []TOCItem
 	IsReadView  bool
 }
 
-// Estrutura auxiliar para metadados da cerca de código
 type CodeBlockMeta struct {
 	Lang  string
 	Title string
@@ -61,12 +115,9 @@ type CodeBlockMeta struct {
 }
 
 var mdParser goldmark.Markdown
-
-// Regex para capturar os parâmetros da linha de código do Markdown (ex: ```go title=go.mod icon=go-mod)
 var codeBlockAttrRegex = regexp.MustCompile("```([a-zA-Z0-9_-]+)(?:\\s+([^\\n]+))?")
 
 func init() {
-	// Garante que o FileServer sirva fontes com o MIME correto (o Go não mapeia .ttf/.woff por padrão)
 	mime.AddExtensionType(".ttf", "font/ttf")
 	mime.AddExtensionType(".otf", "font/otf")
 	mime.AddExtensionType(".woff", "font/woff")
@@ -77,9 +128,7 @@ func init() {
 			highlighting.NewHighlighting(
 				highlighting.WithStyle("github-dark"),
 				highlighting.WithGuessLanguage(true),
-				highlighting.WithFormatOptions(
-					chromahtml.WithLineNumbers(true),
-				),
+				highlighting.WithFormatOptions(chromahtml.WithLineNumbers(true)),
 			),
 		),
 		goldmark.WithParserOptions(parser.WithAutoHeadingID()),
@@ -87,6 +136,14 @@ func init() {
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Erro ao carregar o arquivo .env")
+	}
+
+	// Inicializa o cache com a API key carregada do ambiente
+	lastFmCache = NewLastFMCache(os.Getenv("LASTFM_API_KEY"))
+
 	Server(8080)
 }
 
@@ -94,28 +151,22 @@ func Server(port int) {
 	PORT := fmt.Sprintf(":%v", port)
 	fs := http.FileServer(http.Dir("."))
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/posts/") {
-			slug := strings.TrimPrefix(r.URL.Path, "/posts/")
+	// Rota para o widget HTMX
+	http.HandleFunc("/api/lastfm-widget", lastFmHandler)
 
-			fileBytes, fm, found := resolvePostFile(slug)
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if after, ok := strings.CutPrefix(r.URL.Path, "/posts/"); ok {
+			slug := after
+			fileBytes, fm, fileName, found := resolvePostFile(slug)
 			if !found {
 				http.Error(w, "Post não encontrado", http.StatusNotFound)
 				return
 			}
 
-			// 1. Separa Frontmatter do Conteúdo Markdown
 			_, mdContent := parseFrontmatter(fileBytes)
-
-			// 2. Extrai os atributos customizados (title, icon) antes do Goldmark filtrar
 			metas := parseCodeBlockAttributes(mdContent)
-
-			// 3. Converte o Markdown para HTML usando Goldmark (parse único)
-			//    com IDs de heading normalizados (acentos -> letra base)
 			ctx := parser.NewContext(parser.WithIDs(&slugIDs{values: map[string]bool{}}))
 			doc := mdParser.Parser().Parse(text.NewReader(mdContent), parser.WithContext(ctx))
-
-			// 3.1 Gera a Tabela de Conteúdos a partir dos títulos
 			toc := buildTOC(doc, mdContent)
 
 			var buf bytes.Buffer
@@ -124,40 +175,40 @@ func Server(port int) {
 				return
 			}
 
-			// 4. Pós-processa o HTML inserindo a Titlebar conforme as regrinhas
 			htmlFinal := postProcessCodeBlocks(buf.String(), metas)
-
 			title := fm.Title
 			if title == "" {
 				title = strings.Title(strings.ReplaceAll(slug, "-", " "))
 			}
 
-			post := Post{
-				Title:   title,
-				Slug:    slug,
-				Date:    fm.Date,
-				Author:  fm.Author,
-				Content: template.HTML(htmlFinal),
+			dateISO, dateTooltip := formatPostDates(fm.Date)
+			post := Post{Title: title, Slug: slug, Date: fm.Date, DateISO: dateISO, DateTooltip: dateTooltip, Author: fm.Author, Thumbnail: fm.Thumbnail, ReadTime: estimateReadTime(mdContent), File: fileName, Content: template.HTML(htmlFinal)}
+
+			var prevPost, nextPost *Post
+			if all, err := listPosts("posts"); err == nil {
+				for i := range all {
+					if all[i].File == fileName {
+						if i > 0 {
+							nextPost = &all[i-1]
+						}
+						if i < len(all)-1 {
+							prevPost = &all[i+1]
+						}
+						break
+					}
+				}
 			}
 
-			renderTemplate(w, PageData{CurrentPost: &post, TOC: toc, IsReadView: true})
+			renderTemplate(w, PageData{CurrentPost: &post, PrevPost: prevPost, NextPost: nextPost, TOC: toc, IsReadView: true})
 			return
 		}
 
 		if r.URL.Path != "/" {
-			if strings.HasSuffix(r.URL.Path, ".ttf") {
-				w.Header().Set("Content-Type", "font/ttf")
-			}
 			fs.ServeHTTP(w, r)
 			return
 		}
 
-		posts, err := getLastThreePosts("posts")
-		if err != nil {
-			http.Error(w, "Erro ao carregar posts", http.StatusInternalServerError)
-			return
-		}
-
+		posts, _ := getLastThreePosts("posts")
 		renderTemplate(w, PageData{Posts: posts, IsReadView: false})
 	})
 
@@ -165,7 +216,148 @@ func Server(port int) {
 	log.Fatal(http.ListenAndServe(PORT, nil))
 }
 
-// Extrai o bloco YAML do início do arquivo .md
+// --- Lógica Last.fm ---
+func lastFmHandler(w http.ResponseWriter, r *http.Request) {
+	idxStr := r.URL.Query().Get("index")
+	index := 0
+	if idxStr != "" {
+		fmt.Sscanf(idxStr, "%d", &index)
+	}
+
+	user := os.Getenv("LASTFM_USER")
+	key := os.Getenv("LASTFM_API_KEY")
+
+	if user == "" || key == "" {
+		fmt.Println("❌ Erro: LASTFM_USER ou LASTFM_API_KEY não definidos no ambiente/.env")
+		http.Error(w, "Configuração do Last.fm ausente", http.StatusInternalServerError)
+		return
+	}
+
+	tracks, err := fetchLastFmTracks(user, key)
+	if err != nil {
+		fmt.Printf("❌ Erro ao buscar músicas do Last.fm: %v\n", err)
+		http.Error(w, "Erro ao carregar músicas", http.StatusInternalServerError)
+		return
+	}
+
+	if len(tracks) == 0 {
+		fmt.Println("⚠️ Nenhuma música retornado pelo Last.fm")
+		return
+	}
+
+	song := tracks[index%len(tracks)]
+	nextIndex := (index + 1) % len(tracks)
+
+	tmpl := `
+    <div class="song-card fade-in" 
+         hx-get="/api/lastfm-widget?index={{.Next}}" 
+         hx-trigger="every 15s" 
+         hx-swap="outerHTML transition:true">
+        <img src="{{.Song.CoverURL}}" width="80" style="border-radius: 4px;">
+        <div class="info">
+            <div class="title">{{.Song.Title}}</div>
+            <div class="album">{{.Song.Album}}</div>
+            <div class="artist">{{.Song.Artist}}</div>
+        </div>
+    </div>`
+
+	t := template.Must(template.New("lastfm").Parse(tmpl))
+	t.Execute(w, map[string]interface{}{"Song": song, "Next": nextIndex})
+}
+
+func fetchLastFmTracks(username, apiKey string) ([]SongInfo, error) {
+	u := url.Values{}
+	u.Add("method", "user.getRecentTracks")
+	u.Add("user", username)
+	u.Add("api_key", apiKey)
+	u.Add("format", "json")
+	u.Add("limit", "10")
+	u.Add("extended", "1")
+
+	resp, err := http.Get("https://ws.audioscrobbler.com/2.0/?" + u.Encode())
+	if err != nil || resp.StatusCode != 200 {
+		return nil, fmt.Errorf("api error")
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+
+	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	var res LastFmResponse
+	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
+		return nil, err
+	}
+
+	if len(res.RecentTracks.Track) == 0 {
+		return nil, fmt.Errorf("no tracks")
+	}
+
+	var songs []SongInfo
+	for _, t := range res.RecentTracks.Track {
+		artistName := t.Artist.Text
+		if artistName == "" {
+			artistName = t.Artist.Name
+		}
+		if artistName == "" {
+			artistName = "Artista desconhecido"
+		}
+
+		albumName := t.Album.Text
+		if albumName == "" {
+			albumName = t.Album.Name
+		}
+
+		// Pega a imagem que veio no getRecentTracks (se houver)
+		img := ""
+		for _, image := range t.Image {
+			if image.Text != "" {
+				img = image.Text
+			}
+		}
+
+		// --- APLICANDO A OPÇÃO 1: Se álbum ou imagem vierem vazios, busca do Cache/API ---
+		if (albumName == "" || albumName == "Álbum desconhecido" || img == "") && lastFmCache != nil {
+			cachedAlbum, cachedCover := lastFmCache.GetOrFetch(artistName, t.Name)
+			if albumName == "" || albumName == "Álbum desconhecido" {
+				if cachedAlbum != "" {
+					albumName = cachedAlbum
+				}
+			}
+			if img == "" {
+				img = cachedCover
+			}
+		}
+
+		// Fallbacks finais caso persista vazio
+		if albumName == "" {
+			albumName = "Álbum desconhecido"
+		}
+		if img == "" {
+			img = "/static/default-cover.png"
+		}
+
+		durationStr := "0:00"
+		if t.Duration != "" && t.Duration != "0" {
+			var sec int
+			fmt.Sscanf(t.Duration, "%d", &sec)
+			durationStr = fmt.Sprintf("%d:%02d", sec/60, sec%60)
+		}
+
+		songs = append(songs, SongInfo{
+			Title:      t.Name,
+			Artist:     artistName,
+			Album:      albumName,
+			Duration:   durationStr,
+			CoverURL:   img,
+			NowPlaying: t.Attr != nil && t.Attr.NowPlaying == "true",
+		})
+	}
+
+	return songs, nil
+}
+
+// --- (O restante do código de Frontmatter, Markdown, TOC e Utilitários permanece igual) ---
 func parseFrontmatter(content []byte) (Frontmatter, []byte) {
 	var fm Frontmatter
 	if !bytes.HasPrefix(content, []byte("---")) {
@@ -181,7 +373,43 @@ func parseFrontmatter(content []byte) (Frontmatter, []byte) {
 	return fm, parts[1]
 }
 
-// Extrai linguagem, title e icon das cercas de código no texto bruto do Markdown
+var codeBlockRegex = regexp.MustCompile("(?s)```.*?```|`[^`\n]+`")
+
+func estimateReadTime(md []byte) int {
+	text := codeBlockRegex.ReplaceAllString(string(md), " ")
+	words := len(strings.Fields(text))
+	minutes := (words + 199) / 200
+	if minutes < 1 {
+		minutes = 1
+	}
+	return minutes
+}
+
+func parsePostDate(s string) time.Time {
+	layouts := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		time.RFC3339,
+		"2006-01-02T15:04:05",
+		"2006-01-02",
+	}
+	s = strings.TrimSpace(s)
+	for _, l := range layouts {
+		if t, err := time.ParseInLocation(l, s, time.Local); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+func formatPostDates(s string) (string, string) {
+	t := parsePostDate(s)
+	if t.IsZero() {
+		return "", ""
+	}
+	return t.Format(time.RFC3339), t.Format("02/01/2006 15:04")
+}
+
 func parseCodeBlockAttributes(mdContent []byte) []CodeBlockMeta {
 	matches := codeBlockAttrRegex.FindAllStringSubmatch(string(mdContent), -1)
 	var metas []CodeBlockMeta
@@ -216,8 +444,6 @@ func parseCodeBlockAttributes(mdContent []byte) []CodeBlockMeta {
 	return metas
 }
 
-// buildTOC percorre o AST do documento Markdown coletando os headings (h2+)
-// que servirão de âncoras na tabela de conteúdos.
 func buildTOC(doc ast.Node, source []byte) []TOCItem {
 	var items []TOCItem
 
@@ -253,8 +479,6 @@ func buildTOC(doc ast.Node, source []byte) []TOCItem {
 	return items
 }
 
-// slugify converte um texto em um slug: minúsculas, espaços trocados por "-",
-// acentos e tils substituídos pela letra base e demais caracteres descartados.
 func slugify(s string) string {
 	var b strings.Builder
 	prevDash := false
@@ -286,7 +510,6 @@ func slugify(s string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// accentMap translitera letras acentuadas/til para a letra base
 var accentMap = map[rune]byte{
 	'á': 'a', 'à': 'a', 'â': 'a', 'ã': 'a', 'ä': 'a', 'å': 'a',
 	'é': 'e', 'è': 'e', 'ê': 'e', 'ë': 'e',
@@ -297,8 +520,6 @@ var accentMap = map[rune]byte{
 	'ç': 'c', 'ñ': 'n',
 }
 
-// slugIDs implementa parser.IDs para gerar as âncoras dos headings
-// com a mesma normalização do slugify (acentos viram letra base).
 type slugIDs struct {
 	values map[string]bool
 }
@@ -327,10 +548,7 @@ func (s *slugIDs) Put(value []byte) {
 	s.values[string(value)] = true
 }
 
-// resolvePostFile encontra o arquivo .md correspondente ao slug pedido.
-// Primeiro tenta casar com o slug derivado do título (frontmatter);
-// em último caso, usa o nome do arquivo (compatibilidade com URLs antigas).
-func resolvePostFile(slug string) ([]byte, Frontmatter, bool) {
+func resolvePostFile(slug string) ([]byte, Frontmatter, string, bool) {
 	files, err := os.ReadDir("posts")
 	if err == nil {
 		for _, file := range files {
@@ -344,7 +562,7 @@ func resolvePostFile(slug string) ([]byte, Frontmatter, bool) {
 			}
 			fm, _ := parseFrontmatter(content)
 			if fm.Title != "" && slugify(fm.Title) == slug {
-				return content, fm, true
+				return content, fm, file.Name(), true
 			}
 		}
 	}
@@ -352,13 +570,12 @@ func resolvePostFile(slug string) ([]byte, Frontmatter, bool) {
 	filePath := filepath.Join("posts", slug+".md")
 	content, err := os.ReadFile(filePath)
 	if err != nil {
-		return nil, Frontmatter{}, false
+		return nil, Frontmatter{}, "", false
 	}
 	fm, _ := parseFrontmatter(content)
-	return content, fm, true
+	return content, fm, slug + ".md", true
 }
 
-// Injeta a Titlebar no HTML gerado pelo Goldmark/Chroma
 func postProcessCodeBlocks(html string, metas []CodeBlockMeta) string {
 	reBlock := regexp.MustCompile(`(?s)<pre[^>]*><code.*?</code></pre>`)
 
@@ -372,7 +589,6 @@ func postProcessCodeBlocks(html string, metas []CodeBlockMeta) string {
 			return match
 		}
 
-		// 1. Determina o Título
 		title := meta.Title
 		if title == "" {
 			if meta.Lang != "" {
@@ -382,11 +598,10 @@ func postProcessCodeBlocks(html string, metas []CodeBlockMeta) string {
 			}
 		}
 
-		// 2. Determina o Ícone com base nas regras de prioridade
 		icon := resolveIcon(meta.Icon, meta.Title, meta.Lang)
 
 		iconHtml := fmt.Sprintf(`<img src="/assets/icons/%s.svg" class="code-icon" alt="%s" />`, icon, icon)
-		copyBtnHtml := `<button class="code-copy" type="button" aria-label="Copiar código" title="Copiar código"><span class="copy-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="copy-ok">✓</span></button>`
+		copyBtnHtml := `<button class="code-copy" type="button" aria-label="Copiar código" title="Copiar código"><span class="copy-icon"><svg xmlns="[http://www.w3.org/2000/svg](http://www.w3.org/2000/svg)" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="copy-ok">✓</span></button>`
 		titleHtml := fmt.Sprintf(`<div class="code-header">%s<span class="code-title">%s</span>%s</div>`, iconHtml, title, copyBtnHtml)
 
 		return fmt.Sprintf(`<div class="code-card">%s%s</div>`, titleHtml, match)
@@ -395,24 +610,17 @@ func postProcessCodeBlocks(html string, metas []CodeBlockMeta) string {
 	return processed
 }
 
-// Lógica de Prioridade do Ícone:
-// 1. Se "icon" foi explicitado, usa-o;
-// 2. Se não foi, mas o "title" é compatível com um valor associado, usa o ícone associado ao title;
-// 3. Em último caso, usa o ícone padrão da linguagem.
 func resolveIcon(explicitIcon, title, lang string) string {
-	// Regra 1
 	if explicitIcon != "" {
 		return explicitIcon
 	}
 
-	// Regra 2
 	if title != "" {
 		if iconFromTitle := getIconFromFilename(title); iconFromTitle != "" {
 			return iconFromTitle
 		}
 	}
 
-	// Regra 3
 	return getIconForLang(lang)
 }
 
@@ -587,6 +795,17 @@ func renderTemplate(w http.ResponseWriter, data PageData) {
 }
 
 func getLastThreePosts(dir string) ([]Post, error) {
+	all, err := listPosts(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(all) > 3 {
+		all = all[:3]
+	}
+	return all, nil
+}
+
+func listPosts(dir string) ([]Post, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -614,17 +833,15 @@ func getLastThreePosts(dir string) ([]Post, error) {
 	}
 
 	sort.Slice(fileList, func(i, j int) bool {
-		return fileList[i].modTime > fileList[j].modTime
+		if fileList[i].modTime != fileList[j].modTime {
+			return fileList[i].modTime > fileList[j].modTime
+		}
+		return fileList[i].name < fileList[j].name
 	})
 
 	var posts []Post
-	limit := 3
-	if len(fileList) < limit {
-		limit = len(fileList)
-	}
-
-	for i := 0; i < limit; i++ {
-		fileName := fileList[i].name
+	for _, entry := range fileList {
+		fileName := entry.name
 		filePath := filepath.Join(dir, fileName)
 
 		content, _ := os.ReadFile(filePath)
@@ -645,6 +862,7 @@ func getLastThreePosts(dir string) ([]Post, error) {
 			Title: title,
 			Slug:  slug,
 			Date:  fm.Date,
+			File:  fileName,
 		})
 	}
 
