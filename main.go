@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -73,11 +74,12 @@ var lastFmCache *LastFMCache
 
 // --- Estruturas originais ---
 type Frontmatter struct {
-	Title     string `yaml:"title"`
-	Date      string `yaml:"date"`
-	LastDate  string `yaml:"last-date"`
-	Author    string `yaml:"author"`
-	Thumbnail string `yaml:"thumbnail"`
+	Title     string   `yaml:"title"`
+	Date      string   `yaml:"date"`
+	LastDate  string   `yaml:"last-date"`
+	Author    string   `yaml:"author"`
+	Thumbnail string   `yaml:"thumbnail"`
+	Tags      []string `yaml:"tags"`
 }
 
 type Post struct {
@@ -90,6 +92,7 @@ type Post struct {
 	Thumbnail   string
 	ReadTime    int
 	File        string
+	Tags        []string
 	Content     template.HTML
 }
 
@@ -99,13 +102,38 @@ type TOCItem struct {
 	Level int
 }
 
+type BlogTag struct {
+	Name   string
+	Count  int
+	Active bool
+}
+
+type BlogMonth struct {
+	Key    string
+	Label  string
+	Count  int
+	Active bool
+}
+
 type PageData struct {
-	Posts       []Post
-	CurrentPost *Post
-	PrevPost    *Post
-	NextPost    *Post
-	TOC         []TOCItem
-	IsReadView  bool
+	Posts        []Post
+	CurrentPost  *Post
+	PrevPost     *Post
+	NextPost     *Post
+	TOC          []TOCItem
+	IsReadView   bool
+	IsBlogView   bool
+	FeaturedPost *Post
+	CurrentPage  int
+	TotalPages   int
+	PrevPage     int
+	NextPage     int
+	Pages        []int
+	Q            string
+	ActiveTag    string
+	ActiveMonth  string
+	Tags         []BlogTag
+	Months       []BlogMonth
 }
 
 type CodeBlockMeta struct {
@@ -203,6 +231,11 @@ func Server(port int) {
 			return
 		}
 
+		if r.URL.Path == "/blog" {
+			blogHandler(w, r)
+			return
+		}
+
 		if r.URL.Path != "/" {
 			fs.ServeHTTP(w, r)
 			return
@@ -214,6 +247,184 @@ func Server(port int) {
 
 	fmt.Printf("⚡ Serving at http://localhost%v\n", PORT)
 	log.Fatal(http.ListenAndServe(PORT, nil))
+}
+
+// --- Blog ---
+const blogPerPage = 7
+
+var ptBRMonths = [...]string{
+	"janeiro", "fevereiro", "março", "abril", "maio", "junho",
+	"julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+}
+
+func blogHandler(w http.ResponseWriter, r *http.Request) {
+	all, err := listPosts("posts")
+	if err != nil {
+		http.Error(w, "Erro ao listar posts", http.StatusInternalServerError)
+		return
+	}
+
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
+	month := strings.TrimSpace(r.URL.Query().Get("m"))
+
+	// Agregações a partir do conjunto completo
+	tagCounts := map[string]int{}
+	monthCounts := map[string]int{}
+	for _, p := range all {
+		for _, t := range p.Tags {
+			tagCounts[t]++
+		}
+		if k := postMonthKey(p); k != "" {
+			monthCounts[k]++
+		}
+	}
+
+	// Filtros combináveis
+	qLower := strings.ToLower(q)
+	var filtered []Post
+	for _, p := range all {
+		if qLower != "" && !strings.Contains(strings.ToLower(p.Title), qLower) {
+			continue
+		}
+		if tag != "" && !containsTag(p.Tags, tag) {
+			continue
+		}
+		if month != "" && postMonthKey(p) != month {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+
+	totalPages := (len(filtered) + blogPerPage - 1) / blogPerPage
+	if totalPages < 1 {
+		totalPages = 1
+	}
+
+	page := 1
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if n, e := strconv.Atoi(pageStr); e == nil {
+			page = n
+		}
+	}
+	if page < 1 {
+		page = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	start := (page - 1) * blogPerPage
+	end := start + blogPerPage
+	if end > len(filtered) {
+		end = len(filtered)
+	}
+
+	var featured *Post
+	var bento []Post
+	if start < end {
+		featured = &filtered[start]
+		bento = filtered[start+1 : end]
+	}
+
+	var pages []int
+	for i := 1; i <= totalPages; i++ {
+		pages = append(pages, i)
+	}
+
+	prevPage, nextPage := 0, 0
+	if page > 1 {
+		prevPage = page - 1
+	}
+	if page < totalPages {
+		nextPage = page + 1
+	}
+
+	// Tags ordenadas alfabeticamente
+	tagNames := make([]string, 0, len(tagCounts))
+	for name := range tagCounts {
+		tagNames = append(tagNames, name)
+	}
+	sort.Strings(tagNames)
+	var blogTags []BlogTag
+	for _, name := range tagNames {
+		blogTags = append(blogTags, BlogTag{Name: name, Count: tagCounts[name], Active: name == tag})
+	}
+
+	// Meses em ordem decrescente
+	monthKeys := make([]string, 0, len(monthCounts))
+	for k := range monthCounts {
+		monthKeys = append(monthKeys, k)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(monthKeys)))
+	var blogMonths []BlogMonth
+	for _, k := range monthKeys {
+		blogMonths = append(blogMonths, BlogMonth{Key: k, Label: monthLabel(k), Count: monthCounts[k], Active: k == month})
+	}
+
+	renderTemplate(w, PageData{
+		IsBlogView:   true,
+		Posts:        bento,
+		FeaturedPost: featured,
+		CurrentPage:  page,
+		TotalPages:   totalPages,
+		PrevPage:     prevPage,
+		NextPage:     nextPage,
+		Pages:        pages,
+		Q:            q,
+		ActiveTag:    tag,
+		ActiveMonth:  month,
+		Tags:         blogTags,
+		Months:       blogMonths,
+	})
+}
+
+func postMonthKey(p Post) string {
+	if len(p.DateISO) >= 7 {
+		return p.DateISO[:7]
+	}
+	return ""
+}
+
+func monthLabel(key string) string {
+	if len(key) != 7 {
+		return key
+	}
+	year := key[:4]
+	m, err := strconv.Atoi(key[5:])
+	if err != nil || m < 1 || m > 12 {
+		return key
+	}
+	return strings.Title(ptBRMonths[m-1]) + " " + year
+}
+
+func containsTag(tags []string, target string) bool {
+	for _, t := range tags {
+		if t == target {
+			return true
+		}
+	}
+	return false
+}
+
+func blogURL(page int, q, tag, month string) string {
+	params := url.Values{}
+	if page > 1 {
+		params.Set("page", strconv.Itoa(page))
+	}
+	if q != "" {
+		params.Set("q", q)
+	}
+	if tag != "" {
+		params.Set("tag", tag)
+	}
+	if month != "" {
+		params.Set("m", month)
+	}
+	if len(params) == 0 {
+		return "/blog"
+	}
+	return "/blog?" + params.Encode()
 }
 
 // --- Lógica Last.fm ---
@@ -785,13 +996,12 @@ func getIconForLang(lang string) string {
 	return "_file"
 }
 
+var indexTmpl = template.Must(template.New("index.html").
+	Funcs(template.FuncMap{"blogURL": blogURL}).
+	ParseFiles("index.html"))
+
 func renderTemplate(w http.ResponseWriter, data PageData) {
-	tmpl, err := template.ParseFiles("index.html")
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	tmpl.Execute(w, data)
+	indexTmpl.Execute(w, data)
 }
 
 func getLastThreePosts(dir string) ([]Post, error) {
@@ -869,6 +1079,7 @@ func listPosts(dir string) ([]Post, error) {
 			ReadTime:    estimateReadTime(body),
 			DateISO:     dateISO,
 			DateTooltip: dateTooltip,
+			Tags:        fm.Tags,
 		})
 	}
 

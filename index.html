@@ -19,12 +19,12 @@
         <span class="func-color">portfolio</span>()
         {
     </a>
-    <main class="container{{if .IsReadView}} container-read{{end}}">
+    <main class="container{{if or .IsReadView .IsBlogView}} container-read{{end}}">
         <aside class="left-bar">
             <img id="avatar" src="/assets/images/avatar.png" alt="" />
             <nav>
                 <ul class="navbar">
-                    <li><a href="/">Blog</a></li>
+                    <li><a href="/blog">Blog</a></li>
                     <li><a href="">Projetos</a></li>
                     <li><a href="">#100DaysOfGo</a></li>
                 </ul>
@@ -64,7 +64,8 @@
                             {{else}}
                             <span class="post-date">{{.CurrentPost.Date}}</span>
                             {{end}}
-                            <span class="post-read-time"><i class="fa-solid fa-clock"></i> {{.CurrentPost.ReadTime}} min de
+                            <span class="post-read-time"><i class="fa-solid fa-clock"></i> {{.CurrentPost.ReadTime}} min
+                                de
                                 leitura</span>
                         </div>
                         {{if .CurrentPost.Thumbnail}}
@@ -101,6 +102,105 @@
                     {{end}}
                 </nav>
             </div>
+            {{else if .IsBlogView}}
+            <!-- Visão do Blog -->
+            <div class="post-layout">
+                <div class="post-scroll">
+                    <div class="post-scroll-shadow top"></div>
+                    <div class="post-scroll-shadow bottom"></div>
+                    <div class="post-content">
+                        <a href="/" style="text-decoration: none; color: coral;">← Voltar para home</a>
+                        <h1>Blog</h1>
+                        {{if .FeaturedPost}}
+                        <a class="blog-featured" href="/posts/{{.FeaturedPost.Slug}}">
+                            {{if .FeaturedPost.Thumbnail}}
+                            <img class="blog-featured-img" src="{{.FeaturedPost.Thumbnail}}"
+                                alt="{{.FeaturedPost.Title}}">
+                            {{end}}
+                            <span class="blog-featured-tag">Último post</span>
+                            <h2>{{.FeaturedPost.Title}}</h2>
+                            <div class="post-meta">
+                                {{if .FeaturedPost.DateISO}}
+                                <span class="post-date" data-datetime="{{.FeaturedPost.DateISO}}"
+                                    data-tooltip="{{.FeaturedPost.DateTooltip}}"></span>
+                                {{else}}
+                                <span class="post-date">{{.FeaturedPost.Date}}</span>
+                                {{end}}
+                                <span class="post-read-time"><i class="fa-solid fa-clock"></i>
+                                    {{.FeaturedPost.ReadTime}} min de leitura</span>
+                            </div>
+                        </a>
+                        {{end}}
+                        <div class="blog-grid">
+                            {{range .Posts}}
+                            <a class="blog-card" href="/posts/{{.Slug}}">
+                                {{if .Thumbnail}}
+                                <img class="blog-card-img" src="{{.Thumbnail}}" alt="{{.Title}}">
+                                {{end}}
+                                <span class="blog-card-title">{{.Title}}</span>
+                                <span class="blog-card-meta">
+                                    {{if .DateISO}}
+                                    <span class="post-date" data-datetime="{{.DateISO}}"
+                                        data-tooltip="{{.DateTooltip}}"></span>
+                                    {{else}}
+                                    <span class="post-date">{{.Date}}</span>
+                                    {{end}}
+                                    <span>· {{.ReadTime}} min</span>
+                                </span>
+                            </a>
+                            {{end}}
+                        </div>
+                        {{if gt .TotalPages 1}}
+                        <nav class="blog-pagination" aria-label="Paginação">
+                            {{if gt .PrevPage 0}}
+                            <a class="page-link" href="{{blogURL .PrevPage .Q .ActiveTag .ActiveMonth}}">‹</a>
+                            {{end}}
+                            {{range .Pages}}
+                            <a class="page-link{{if eq . $.CurrentPage}} active{{end}}"
+                                href="{{blogURL . $.Q $.ActiveTag $.ActiveMonth}}">{{.}}</a>
+                            {{end}}
+                            {{if gt .NextPage 0}}
+                            <a class="page-link" href="{{blogURL .NextPage .Q .ActiveTag .ActiveMonth}}">›</a>
+                            {{end}}
+                        </nav>
+                        {{end}}
+                    </div>
+                </div>
+                <aside class="blog-aside">
+                    <form class="blog-search" method="get" action="/blog">
+                        <input type="search" name="q" value="{{.Q}}" placeholder="Buscar posts..."
+                            aria-label="Buscar posts">
+                        {{if .ActiveTag}}<input type="hidden" name="tag" value="{{.ActiveTag}}">{{end}}
+                        {{if .ActiveMonth}}<input type="hidden" name="m" value="{{.ActiveMonth}}">{{end}}
+                    </form>
+                    <section class="blog-widget">
+                        <h2>Tags</h2>
+                        {{if .Tags}}
+                        <ul class="blog-tags">
+                            {{range .Tags}}
+                            <li><a class="blog-tag{{if .Active}} active{{end}}"
+                                    href="{{blogURL 1 $.Q .Name $.ActiveMonth}}">{{.Name}} ({{.Count}})</a></li>
+                            {{end}}
+                        </ul>
+                        {{else}}
+                        <p class="blog-empty">Sem tags ainda.</p>
+                        {{end}}
+                    </section>
+                    <section class="blog-widget">
+                        <h2>Por mês</h2>
+                        {{if .Months}}
+                        <ul class="blog-months">
+                            {{range .Months}}
+                            <li><a class="{{if .Active}}active{{end}}"
+                                    href="{{blogURL 1 $.Q $.ActiveTag .Key}}">{{.Label}} ({{.Count}})</a></li>
+                            {{end}}
+                        </ul>
+                        {{else}}
+                        <p class="blog-empty">Sem posts.</p>
+                        {{end}}
+                    </section>
+                </aside>
+            </div>
             {{else}}
             <!-- Visão da Home Page -->
             <div style="display: flex; flex-direction: column;">
@@ -115,11 +215,10 @@
                 <ul>
                     {{range .Posts}}
                     <li style="margin-top: 0.5rem;">
-                        <a class="post-link" href="/posts/{{.Slug}}"
-                            data-preview-img="{{.Thumbnail}}"
-                            data-preview-datetime="{{.DateISO}}"
-                            data-preview-tooltip="{{.DateTooltip}}"
-                            data-preview-time="{{.ReadTime}}">{{.Title}}<sup style="font-family: 'Geist Mono', monospace;">
+                        <a class="post-link" href="/posts/{{.Slug}}" data-preview-img="{{.Thumbnail}}"
+                            data-preview-datetime="{{.DateISO}}" data-preview-tooltip="{{.DateTooltip}}"
+                            data-preview-time="{{.ReadTime}}">{{.Title}}<sup
+                                style="font-family: 'Geist Mono', monospace;">
                                 ↗</sup></a>
                     </li>
                     {{else}}

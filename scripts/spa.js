@@ -83,7 +83,7 @@ function flipItem(el, before, after) {
 }
 
 async function navigate(path, { push = true, force = false } = {}) {
-    if (!force && path === location.pathname) return;
+    if (!force && path === location.pathname + location.search + location.hash) return;
 
     const main = document.querySelector("main");
     if (!main) {
@@ -203,6 +203,15 @@ document.addEventListener("click", (e) => {
 
     e.preventDefault();
     navigate(url.pathname + url.search + url.hash, { push: true });
+});
+
+document.addEventListener("submit", (e) => {
+    const form = e.target.closest ? e.target.closest(".blog-search") : null;
+    if (!form) return;
+    e.preventDefault();
+    const url = new URL(form.action || location.pathname, location.href);
+    url.search = new URLSearchParams(new FormData(form)).toString();
+    navigate(url.pathname + url.search, { push: true });
 });
 
 window.addEventListener("popstate", () => {

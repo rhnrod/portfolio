@@ -1,5 +1,6 @@
 ---
 title: "Olá, mundo! Olá, gophers!"
+thumbnail: "../assets/images/thumbnails/treta.jpeg" 
 date: "2026-08-03"
 author: "Rhuan Emanuel"
 ---

@@ -1,5 +1,5 @@
 ---
-title: "Olá, mundo! Olá, gophers! 1"
+title: "Olá, mundo! Olá, gophers! 7"
 thumbnail: "../assets/images/thumbnails/treta.jpeg" 
 date: "2026-08-03"
 author: "Rhuan Emanuel"
