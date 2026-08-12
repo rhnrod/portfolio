@@ -586,11 +586,10 @@ h3 {
     margin: 0.6rem 1.25rem 1.3rem;
 }
 
-/* Grid bento dos posts */
+/* Grid de posts */
 .blog-grid {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    grid-auto-rows: 150px;
+    grid-template-columns: repeat(2, 1fr);
     gap: 1rem;
     margin-top: 2rem;
 }
@@ -601,6 +600,7 @@ h3 {
     flex-direction: column;
     justify-content: flex-end;
     overflow: hidden;
+    aspect-ratio: 1;
     background: #1e1e1e;
     border: 1px solid #3a3a3a;
     border-radius: 12px;
@@ -610,24 +610,6 @@ h3 {
 
 .blog-card:hover {
     border-color: coral;
-}
-
-.blog-card:nth-child(1) {
-    grid-column: span 2;
-    grid-row: span 2;
-}
-
-.blog-card:nth-child(2) {
-    grid-column: 3;
-    grid-row: span 2;
-}
-
-.blog-card:nth-child(5) {
-    grid-column: span 2;
-}
-
-.blog-card:nth-child(6) {
-    grid-column: span 2;
 }
 
 .blog-card-img {
@@ -874,19 +856,6 @@ h3 {
 
     .blog-grid {
         grid-template-columns: repeat(2, 1fr);
-        grid-auto-rows: 140px;
-    }
-
-    .blog-card:nth-child(1),
-    .blog-card:nth-child(2),
-    .blog-card:nth-child(5),
-    .blog-card:nth-child(6) {
-        grid-column: span 1;
-        grid-row: auto;
-    }
-
-    .blog-card:nth-child(1) {
-        grid-column: span 2;
     }
 }
 

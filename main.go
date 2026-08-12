@@ -250,7 +250,8 @@ func Server(port int) {
 }
 
 // --- Blog ---
-const blogPerPage = 7
+const blogFirstPageSize = 5
+const blogPageSize = 6
 
 var ptBRMonths = [...]string{
 	"janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -296,9 +297,12 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		filtered = append(filtered, p)
 	}
 
-	totalPages := (len(filtered) + blogPerPage - 1) / blogPerPage
-	if totalPages < 1 {
+	total := len(filtered)
+	var totalPages int
+	if total <= blogFirstPageSize {
 		totalPages = 1
+	} else {
+		totalPages = 1 + (total-blogFirstPageSize+blogPageSize-1)/blogPageSize
 	}
 
 	page := 1
@@ -314,17 +318,28 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		page = totalPages
 	}
 
-	start := (page - 1) * blogPerPage
-	end := start + blogPerPage
-	if end > len(filtered) {
-		end = len(filtered)
-	}
-
 	var featured *Post
 	var bento []Post
-	if start < end {
-		featured = &filtered[start]
-		bento = filtered[start+1 : end]
+	if page == 1 {
+		if total > 0 {
+			featured = &filtered[0]
+			bEnd := blogFirstPageSize
+			if bEnd > total {
+				bEnd = total
+			}
+			if 1 < bEnd {
+				bento = filtered[1:bEnd]
+			}
+		}
+	} else {
+		start := blogFirstPageSize + (page-2)*blogPageSize
+		end := start + blogPageSize
+		if end > total {
+			end = total
+		}
+		if start < end {
+			bento = filtered[start:end]
+		}
 	}
 
 	var pages []int
