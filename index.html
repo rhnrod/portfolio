@@ -60,7 +60,7 @@
                         <div class="post-meta">
                             {{if .CurrentPost.DateISO}}
                             <span class="post-date" data-datetime="{{.CurrentPost.DateISO}}"
-                                title="{{.CurrentPost.DateTooltip}}"></span>
+                                data-tooltip="{{.CurrentPost.DateTooltip}}"></span>
                             {{else}}
                             <span class="post-date">{{.CurrentPost.Date}}</span>
                             {{end}}
@@ -115,7 +115,11 @@
                 <ul>
                     {{range .Posts}}
                     <li style="margin-top: 0.5rem;">
-                        <a href="/posts/{{.Slug}}">{{.Title}}<sup style="font-family: 'Geist Mono', monospace;">
+                        <a class="post-link" href="/posts/{{.Slug}}"
+                            data-preview-img="{{.Thumbnail}}"
+                            data-preview-datetime="{{.DateISO}}"
+                            data-preview-tooltip="{{.DateTooltip}}"
+                            data-preview-time="{{.ReadTime}}">{{.Title}}<sup style="font-family: 'Geist Mono', monospace;">
                                 ↗</sup></a>
                     </li>
                     {{else}}
@@ -127,6 +131,16 @@
         </div>
     </main>
     <p style="font-family: 'Maple Mono', monospace; position: fixed; bottom: 4%; right: 4%;">} </p>
+
+    <div class="post-preview">
+        <img class="post-preview-img" alt="">
+        <div class="post-preview-meta">
+            <span class="post-preview-date"></span>
+            <span class="post-preview-time"></span>
+        </div>
+    </div>
+
+    <div class="post-tooltip" role="tooltip"></div>
 
     <script>
         function initPostPage() {
@@ -193,6 +207,8 @@
 
             initRelativeDates();
             initScrollShadows();
+            initPostPreview();
+            initPostTooltip();
         }
 
         document.addEventListener('DOMContentLoaded', initPostPage);
@@ -220,6 +236,125 @@
             document.querySelectorAll('.post-date[data-datetime]').forEach(function (el) {
                 var label = relativeTime(el.getAttribute('data-datetime'));
                 if (label !== null) el.textContent = label;
+            });
+        }
+
+        function initPostPreview() {
+            var card = document.querySelector('.post-preview');
+            if (card) card.classList.remove('show');
+
+            var list = document.querySelector('.posts ul');
+            if (!list || !card || !window.matchMedia('(hover: hover)').matches) return;
+
+            function hide() {
+                card.classList.remove('show');
+            }
+
+            function position(clientX, clientY) {
+                var rect = card.getBoundingClientRect();
+                var margin = 18;
+                var posX = clientX + margin;
+                if (posX + rect.width > window.innerWidth - margin) {
+                    posX = clientX - margin - rect.width;
+                }
+                var posY = clientY + margin;
+                if (posY + rect.height > window.innerHeight - margin) {
+                    posY = clientY - margin - rect.height;
+                }
+                if (posY < margin) posY = margin;
+                card.style.transform = 'translate3d(' + posX + 'px,' + posY + 'px,0)';
+            }
+
+            function fill(link) {
+                var img = card.querySelector('.post-preview-img');
+                var src = link.getAttribute('data-preview-img');
+                if (src) {
+                    img.src = src;
+                    img.alt = link.textContent.replace(/\s+/g, ' ').trim();
+                    img.style.display = '';
+                } else {
+                    img.removeAttribute('src');
+                    img.style.display = 'none';
+                }
+
+                var date = card.querySelector('.post-preview-date');
+                var datetime = link.getAttribute('data-preview-datetime');
+                if (datetime) {
+                    var label = relativeTime(datetime);
+                    date.textContent = label !== null ? label : '';
+                    date.setAttribute('data-tooltip', link.getAttribute('data-preview-tooltip') || '');
+                    date.style.display = '';
+                } else {
+                    date.textContent = '';
+                    date.removeAttribute('data-tooltip');
+                    date.style.display = 'none';
+                }
+
+                var time = card.querySelector('.post-preview-time');
+                time.innerHTML = '<i class="fa-solid fa-clock"></i> ' +
+                    (link.getAttribute('data-preview-time') || '') + ' min de leitura';
+            }
+
+            list.addEventListener('mousemove', function (e) {
+                var link = e.target.closest('.post-link');
+                if (!link) {
+                    hide();
+                    return;
+                }
+                fill(link);
+                card.classList.add('show');
+                position(e.clientX, e.clientY);
+            });
+            list.addEventListener('mouseleave', hide);
+        }
+
+        function initPostTooltip() {
+            var tip = document.querySelector('.post-tooltip');
+            if (tip) tip.classList.remove('show');
+
+            if (!tip || !window.matchMedia('(hover: hover)').matches) return;
+
+            var visible = false;
+
+            function hide() {
+                visible = false;
+                tip.classList.remove('show');
+            }
+
+            function position(clientX, clientY) {
+                var rect = tip.getBoundingClientRect();
+                var margin = 14;
+                var posX = clientX + margin;
+                if (posX + rect.width > window.innerWidth - margin) {
+                    posX = clientX - margin - rect.width;
+                }
+                var posY = clientY + margin;
+                if (posY + rect.height > window.innerHeight - margin) {
+                    posY = clientY - margin - rect.height;
+                }
+                if (posY < margin) posY = margin;
+                tip.style.transform = 'translate3d(' + posX + 'px,' + posY + 'px,0)';
+            }
+
+            document.addEventListener('mouseover', function (e) {
+                var el = e.target.closest ? e.target.closest('[data-tooltip]') : null;
+                if (!el) {
+                    hide();
+                    return;
+                }
+                var content = el.getAttribute('data-tooltip');
+                if (!content) {
+                    hide();
+                    return;
+                }
+                tip.textContent = content;
+                tip.classList.add('show');
+                visible = true;
+                position(e.clientX, e.clientY);
+            });
+
+            document.addEventListener('mousemove', function (e) {
+                if (visible) position(e.clientX, e.clientY);
             });
         }
 

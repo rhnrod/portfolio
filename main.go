@@ -407,7 +407,7 @@ func formatPostDates(s string) (string, string) {
 	if t.IsZero() {
 		return "", ""
 	}
-	return t.Format(time.RFC3339), t.Format("02/01/2006 15:04")
+	return t.Format(time.RFC3339), t.Format("02/01/2006 às 15:04")
 }
 
 func parseCodeBlockAttributes(mdContent []byte) []CodeBlockMeta {
@@ -846,7 +846,7 @@ func listPosts(dir string) ([]Post, error) {
 
 		content, _ := os.ReadFile(filePath)
 
-		fm, _ := parseFrontmatter(content)
+		fm, body := parseFrontmatter(content)
 
 		slug := slugify(fm.Title)
 		if slug == "" {
@@ -858,11 +858,17 @@ func listPosts(dir string) ([]Post, error) {
 			title = strings.Title(strings.ReplaceAll(slug, "-", " "))
 		}
 
+		dateISO, dateTooltip := formatPostDates(fm.Date)
+
 		posts = append(posts, Post{
-			Title: title,
-			Slug:  slug,
-			Date:  fm.Date,
-			File:  fileName,
+			Title:       title,
+			Slug:        slug,
+			Date:        fm.Date,
+			File:        fileName,
+			Thumbnail:   fm.Thumbnail,
+			ReadTime:    estimateReadTime(body),
+			DateISO:     dateISO,
+			DateTooltip: dateTooltip,
 		})
 	}
 

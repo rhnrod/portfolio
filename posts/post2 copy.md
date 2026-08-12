@@ -1,6 +1,6 @@
 ---
 title: "Tretaaaas!"
-thumbnail: "../assets/images/thumbnails/treta.jpg" 
+thumbnail: "../assets/images/thumbnails/treta.jpeg" 
 date: "2026-08-03"
 author: "Rhuan Emanuel"
 ---
