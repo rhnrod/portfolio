@@ -169,7 +169,7 @@
                 <aside class="blog-aside">
                     <form class="blog-search" method="get" action="/blog">
                         <input type="search" name="q" value="{{.Q}}" placeholder="Buscar posts..."
-                            aria-label="Buscar posts">
+                            aria-label="Buscar posts" autocomplete="off">
                         {{if .ActiveTag}}<input type="hidden" name="tag" value="{{.ActiveTag}}">{{end}}
                         {{if .ActiveMonth}}<input type="hidden" name="m" value="{{.ActiveMonth}}">{{end}}
                     </form>

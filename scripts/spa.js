@@ -3,6 +3,8 @@ import { animate, stagger } from "https://cdn.jsdelivr.net/npm/motion@12/+esm";
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 let running = [];
+let searchTimer = null;
+let navController = null;
 
 function run(anim, el, resetOrigin) {
     const entry = { anim, el, resetOrigin };
@@ -85,6 +87,10 @@ function flipItem(el, before, after) {
 async function navigate(path, { push = true, force = false } = {}) {
     if (!force && path === location.pathname + location.search + location.hash) return;
 
+    clearTimeout(searchTimer);
+    if (navController) navController.abort();
+    navController = new AbortController();
+
     const main = document.querySelector("main");
     if (!main) {
         location.href = path;
@@ -93,8 +99,9 @@ async function navigate(path, { push = true, force = false } = {}) {
 
     let res;
     try {
-        res = await fetch(path, { headers: { Accept: "text/html" } });
+        res = await fetch(path, { headers: { Accept: "text/html" }, signal: navController.signal });
     } catch (err) {
+        if (err.name === "AbortError") return;
         location.href = path;
         return;
     }
@@ -102,6 +109,7 @@ async function navigate(path, { push = true, force = false } = {}) {
         location.href = path;
         return;
     }
+    navController = null;
 
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, "text/html");
@@ -212,6 +220,25 @@ document.addEventListener("submit", (e) => {
     const url = new URL(form.action || location.pathname, location.href);
     url.search = new URLSearchParams(new FormData(form)).toString();
     navigate(url.pathname + url.search, { push: true });
+});
+
+document.addEventListener("input", (e) => {
+    const input = e.target.closest ? e.target.closest(".blog-search input[name=q]") : null;
+    const form = input && input.form;
+    if (!input || !form) return;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+        const caret = input.selectionStart ?? input.value.length;
+        const url = new URL(form.action || location.pathname, location.href);
+        url.search = new URLSearchParams(new FormData(form)).toString();
+        navigate(url.pathname + url.search, { push: true }).then(() => {
+            const next = document.querySelector(".blog-search input[name=q]");
+            if (!next) return;
+            next.focus({ preventScroll: true });
+            const pos = Math.min(caret, next.value.length);
+            next.setSelectionRange(pos, pos);
+        });
+    }, 200);
 });
 
 window.addEventListener("popstate", () => {
