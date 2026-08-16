@@ -7,22 +7,30 @@ tags:
   - go
   - testes
   - backend
+  - filmes
+  - jaadugar
+  - full metal alchemist
+  - yomi no tsugai
+  - metalcore
+  - caramelo
+  - stremio
+  - fogo no parquinho
 ---
 
 ## Por que testar
 
 ```go
 func TestSoma(t *testing.T) {
-	tests := []struct {
-		a, b, want int
-	}{
-		{1, 2, 3}, {0, 0, 0}, {-1, 1, 0},
-	}
-	for _, tc := range tests {
-		got := Soma(tc.a, tc.b)
-		if got != tc.want { t.Errorf(...) }
-	}
-	}
+ tests := []struct {
+  a, b, want int
+ }{
+  {1, 2, 3}, {0, 0, 0}, {-1, 1, 0},
+ }
+ for _, tc := range tests {
+  got := Soma(tc.a, tc.b)
+  if got != tc.want { t.Errorf(...) }
+ }
+ }
 ```
 
 lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur
@@ -130,4 +138,3 @@ lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor in
 ## Conclusao
 
 lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur
-

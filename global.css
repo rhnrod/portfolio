@@ -240,13 +240,14 @@ main {
     pointer-events: none;
     background: #1e1e1e;
     border: 1px solid #3a3a3a;
-    border-radius: 12px;
+    border-radius: 6px;
     box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
     padding: 8px 12px;
     font-family: 'Geist Mono', monospace;
     font-size: 12.5px;
     color: #d0d0d0;
-    white-space: nowrap;
+    white-space: normal;
+    max-width: 260px;
     opacity: 0;
     visibility: hidden;
     transition: transform 0.12s ease-out, opacity 0.15s ease;
@@ -659,6 +660,35 @@ h3 {
     color: #bbb;
 }
 
+.post-tag-line {
+    position: relative;
+    z-index: 1;
+    font-family: 'Geist Mono', monospace;
+    font-size: 0.7rem;
+    color: #aaa;
+    margin-top: 0.35rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
+}
+
+.post-tag-line i {
+    margin-right: 0.4em;
+}
+
+.post-tags-bottom {
+    font-family: 'Geist Mono', monospace;
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-top: 1.5rem;
+}
+
+.post-tags-bottom i {
+    margin-right: 0.4em;
+}
+
 /* Paginação */
 .blog-pagination {
     display: flex;
@@ -698,7 +728,7 @@ h3 {
     position: sticky;
     top: 2rem;
     flex-shrink: 0;
-    width: 240px;
+    width: 260px;
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
     scrollbar-width: none;
@@ -738,53 +768,381 @@ h3 {
     border-color: coral;
 }
 
-.blog-tags,
-.blog-months {
-    list-style: none;
-}
-
-.blog-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-}
-
-.blog-tags li,
-.blog-months li {
-    margin: 0.2rem 0;
+/* Botão "Ver mais tags" */
+.blog-tags-more {
+    margin-top: 0.75rem;
+    width: 100%;
+    padding: 0.45rem 0.75rem;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
     font-family: 'Geist Mono', monospace;
     font-size: 0.78rem;
-}
-
-.blog-tag {
-    display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border: 1px solid #3a3a3a;
-    border-radius: 999px;
     color: #ccc;
+    cursor: pointer;
     transition: border-color 0.15s ease, color 0.15s ease;
 }
 
-.blog-tag:hover {
+.blog-tags-more:hover {
     border-color: coral;
     color: #fefefe;
 }
 
-.blog-tag.active {
+/* Painel (modal) com todas as tags */
+.blog-tags-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.blog-tags-panel.show {
+    display: flex;
+}
+
+.blog-tags-modal {
+    width: 100%;
+    max-width: 440px;
+    max-height: min(70vh, 560px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(110, 118, 129, 0.4) transparent;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+.blog-tags-modal::-webkit-scrollbar {
+    width: 8px;
+}
+
+.blog-tags-modal::-webkit-scrollbar-thumb {
+    background-color: rgba(110, 118, 129, 0.4);
+    border-radius: 4px;
+}
+
+.blog-tags-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.blog-tags-modal-head h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #aaa;
+}
+
+.blog-tags-close {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    background: transparent;
+    color: #ccc;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.blog-tags-close:hover {
     border-color: coral;
+    color: #fefefe;
+}
+
+/* Lista simples de tags, em ordem alfabética */
+.blog-tags-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.blog-tags-list li {
+    margin: 0;
+    font-family: 'Geist Mono', monospace;
+}
+
+.blog-tags-list a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.5rem;
+    border-radius: 6px;
+    color: #ccc;
+    font-size: 0.82rem;
+    text-decoration: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.blog-tags-list a:hover {
+    color: #fefefe;
+    background-color: rgba(110, 118, 129, 0.12);
+}
+
+.blog-tags-list a.active {
     color: coral;
 }
 
-.blog-months a {
+.blog-tags-list .fa-tag {
+    flex-shrink: 0;
+    font-size: 0.72rem;
+    color: #888;
+}
+
+.blog-tags-list a.active .fa-tag {
+    color: coral;
+}
+
+.blog-tags-list .blog-tag-name {
+    font-weight: normal;
+    overflow-wrap: anywhere;
+}
+
+.blog-tags-list .blog-tag-count {
+    margin-left: auto;
+    font-size: 0.72rem;
+    color: #888;
+}
+
+.blog-tags-list a.active .blog-tag-count {
+    color: coral;
+}
+
+/* Calendário de posts */
+.blog-cal {
+    font-family: 'Geist Mono', monospace;
+}
+
+.blog-cal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+
+.blog-cal-title {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    font-size: 0.8rem;
     color: #ccc;
+}
+
+.blog-cal-month-btn,
+.blog-cal-year-btn {
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    cursor: pointer;
     transition: color 0.15s ease;
 }
 
-.blog-months a:hover {
+.blog-cal-month-btn:hover,
+.blog-cal-year-btn:hover {
+    color: #fefefe;
+    text-decoration: underline;
+    text-decoration-color: coral;
+    text-underline-offset: 3px;
+}
+
+.blog-cal-year-btn {
+    color: #8b949e;
+}
+
+.blog-cal-year-btn:hover {
+    color: #ccc;
+}
+
+.blog-cal-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    background: transparent;
+    color: #ccc;
+    font-size: 0.7rem;
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease;
+}
+
+.blog-cal-nav:hover {
+    border-color: coral;
     color: #fefefe;
 }
 
-.blog-months a.active {
+.blog-cal-nav.disabled {
+    border-color: #2a2a2a;
+    color: #555;
+    cursor: default;
+}
+
+.blog-cal-nav.disabled:hover {
+    border-color: #2a2a2a;
+    color: #555;
+}
+
+.blog-cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 0.62rem;
+    color: #8b949e;
+    margin-bottom: 4px;
+}
+
+.blog-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+}
+
+.blog-cal-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    aspect-ratio: 1 / 1;
+    border-radius: 6px;
+    background: #161b22;
+    color: #8b949e;
+    font-size: 0.7rem;
+    text-decoration: none;
+}
+
+.blog-cal-day.blank {
+    background: transparent;
+}
+
+.blog-cal-day.future {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.blog-cal-day.has-post {
+    background-color: var(--c, coral);
+    color: #0d1117;
+    font-weight: bold;
+    transition: filter 0.15s ease;
+}
+
+.blog-cal-day.has-post:hover {
+    filter: brightness(1.2);
+}
+
+.blog-cal-day.has-post.active {
+    outline: 2px solid #fefefe;
+    outline-offset: 1px;
+}
+
+/* Popover de escolha de mês/ano (mesmo padrão do modal de tags) */
+.blog-cal-pop {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.55);
+}
+
+.blog-cal-pop.show {
+    display: flex;
+}
+
+.blog-cal-pop-panel {
+    width: 100%;
+    max-width: 320px;
+    max-height: min(70vh, 480px);
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(110, 118, 129, 0.4) transparent;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+.blog-cal-pop-panel::-webkit-scrollbar {
+    width: 8px;
+}
+
+.blog-cal-pop-panel::-webkit-scrollbar-thumb {
+    background-color: rgba(110, 118, 129, 0.4);
+    border-radius: 4px;
+}
+
+.blog-cal-pop-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.blog-cal-pop-head h3 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #aaa;
+}
+
+.blog-cal-months {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 6px;
+}
+
+.blog-cal-years {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.blog-cal-opt {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.45rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #3a3a3a;
+    background: transparent;
+    color: #ccc;
+    font-family: 'Geist Mono', monospace;
+    font-size: 0.82rem;
+    text-decoration: none;
+    transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease;
+}
+
+.blog-cal-years .blog-cal-opt {
+    justify-content: flex-start;
+}
+
+.blog-cal-opt:hover {
+    border-color: coral;
+    color: #fefefe;
+}
+
+.blog-cal-opt.active {
+    border-color: coral;
     color: coral;
 }
 

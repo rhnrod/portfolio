@@ -13,10 +13,10 @@ tags:
 
 ```go
 func BenchmarkFormat(b *testing.B) {
-	for i := 0; i < b.N; i++ {
-		_ = fmt.Sprintf("%d", i)
-	}
-	}
+ for i := 0; i < b.N; i++ {
+  _ = fmt.Sprintf("%d", i)
+ }
+ }
 ```
 
 lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur
@@ -176,4 +176,3 @@ lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor in
 ## Conclusao
 
 lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat duis aute irure in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur
-

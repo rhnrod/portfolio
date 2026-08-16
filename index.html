@@ -4,6 +4,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="htmx-config" content='{"globalViewTransitions": false}'>
+    <link rel="icon" href="/assets/images/avatar.png" type="image/png">
     <title>Portfolio</title>
     <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.10/dist/htmx.min.js"
         integrity="sha384-H5SrcfygHmAuTDZphMHqBJLc3FhssKjG7w/CeCpFReSfwBWDTKpkzPP8c+cLsK+V"
@@ -41,7 +43,7 @@
             <!-- Last.fm Musics -->
             <div class="last-fm">
                 <p style="margin:8px 0px 4px 0px;"><i class="fa-brands fa-spotify"></i> Músicas recentes</p>
-                <div hx-get="/api/lastfm-widget?index=0" hx-trigger="load">
+                <div hx-get="/api/lastfm-widget?index=0" hx-trigger="load once">
                     Carregando playlist...
                 </div>
             </div>
@@ -75,6 +77,12 @@
                         <div class="post-body">
                             {{.CurrentPost.Content}}
                         </div>
+                        {{if .CurrentPost.Tags}}
+                        <div class="post-tags-bottom">
+                            <i class="fa-solid fa-tag"></i>
+                            {{range $i, $t := .CurrentPost.Tags}}{{if $i}}, {{end}}{{$t}}{{end}}
+                        </div>
+                        {{end}}
                         <div class="post-nav">
                             {{if .PrevPost}}
                             <a class="post-nav-link" href="/posts/{{.PrevPost.Slug}}">
@@ -128,6 +136,19 @@
                                 {{end}}
                                 <span class="post-read-time"><i class="fa-solid fa-clock"></i>
                                     {{.FeaturedPost.ReadTime}} min de leitura</span>
+                                {{if .FeaturedPost.Tags}}
+                                {{if gt (len .FeaturedPost.Tags) 3}}
+                                <span class="post-tag-line" data-tooltip="{{range $i, $t := .FeaturedPost.Tags}}{{if $i}}, {{end}}{{$t}}{{end}}">
+                                    <i class="fa-solid fa-tag"></i>
+                                    {{range $i, $t := .FeaturedPost.Tags}}{{if lt $i 2}}{{if $i}}, {{end}}{{$t}}{{end}}{{end}} e outras {{sub (len .FeaturedPost.Tags) 2}} tags
+                                </span>
+                                {{else}}
+                                <span class="post-tag-line">
+                                    <i class="fa-solid fa-tag"></i>
+                                    {{range $i, $t := .FeaturedPost.Tags}}{{if $i}}, {{end}}{{$t}}{{end}}
+                                </span>
+                                {{end}}
+                                {{end}}
                             </div>
                         </a>
                         {{end}}
@@ -153,14 +174,14 @@
                         {{if gt .TotalPages 1}}
                         <nav class="blog-pagination" aria-label="Paginação">
                             {{if gt .PrevPage 0}}
-                            <a class="page-link" href="{{blogURL .PrevPage .Q .ActiveTag .ActiveMonth}}">‹</a>
+                            <a class="page-link" href="{{blogURL .PrevPage .Q .ActiveTag .ActiveDay .ActiveCal}}">‹</a>
                             {{end}}
                             {{range .Pages}}
                             <a class="page-link{{if eq . $.CurrentPage}} active{{end}}"
-                                href="{{blogURL . $.Q $.ActiveTag $.ActiveMonth}}">{{.}}</a>
+                                href="{{blogURL . $.Q $.ActiveTag $.ActiveDay $.ActiveCal}}">{{.}}</a>
                             {{end}}
                             {{if gt .NextPage 0}}
-                            <a class="page-link" href="{{blogURL .NextPage .Q .ActiveTag .ActiveMonth}}">›</a>
+                            <a class="page-link" href="{{blogURL .NextPage .Q .ActiveTag .ActiveDay .ActiveCal}}">›</a>
                             {{end}}
                         </nav>
                         {{end}}
@@ -171,30 +192,123 @@
                         <input type="search" name="q" value="{{.Q}}" placeholder="Buscar posts..."
                             aria-label="Buscar posts" autocomplete="off">
                         {{if .ActiveTag}}<input type="hidden" name="tag" value="{{.ActiveTag}}">{{end}}
-                        {{if .ActiveMonth}}<input type="hidden" name="m" value="{{.ActiveMonth}}">{{end}}
+                        {{if .ActiveCal}}<input type="hidden" name="cal" value="{{.ActiveCal}}">{{end}}
+                        {{if .ActiveDay}}<input type="hidden" name="m" value="{{.ActiveDay}}">{{end}}
                     </form>
                     <section class="blog-widget">
                         <h2>Tags</h2>
                         {{if .Tags}}
-                        <ul class="blog-tags">
+                        <ul class="blog-tags-list">
                             {{range .Tags}}
-                            <li><a class="blog-tag{{if .Active}} active{{end}}"
-                                    href="{{blogURL 1 $.Q .Name $.ActiveMonth}}">{{.Name}} ({{.Count}})</a></li>
+                            <li><a class="{{if .Active}}active{{end}}"
+                                    href="{{if .Active}}{{blogURL 1 $.Q "" $.ActiveDay $.ActiveCal}}{{else}}{{blogURL 1 $.Q .Name $.ActiveDay $.ActiveCal}}{{end}}">
+                                    <i class="fa-solid fa-tag"></i>
+                                    <span class="blog-tag-name">{{.Name}}</span>
+                                    <span class="blog-tag-count">({{.Count}})</span>
+                                </a></li>
                             {{end}}
                         </ul>
+                        {{if gt (len .AllTags) (len .Tags)}}
+                        <button type="button" class="blog-tags-more">Ver mais tags</button>
+                        <div class="blog-tags-panel" id="blogTagsPanel">
+                            <div class="blog-tags-modal">
+                                <div class="blog-tags-modal-head">
+                                    <h3>Todas as tags</h3>
+                                    <button type="button" class="blog-tags-close" aria-label="Fechar">&times;</button>
+                                </div>
+                                <ul class="blog-tags-list">
+                                    {{range .AllTags}}
+                                    <li><a class="{{if .Active}}active{{end}}"
+                                            href="{{if .Active}}{{blogURL 1 $.Q "" $.ActiveDay $.ActiveCal}}{{else}}{{blogURL 1 $.Q .Name $.ActiveDay $.ActiveCal}}{{end}}">
+                                            <i class="fa-solid fa-tag"></i>
+                                            <span class="blog-tag-name">{{.Name}}</span>
+                                            <span class="blog-tag-count">({{.Count}})</span>
+                                        </a></li>
+                                    {{end}}
+                                </ul>
+                            </div>
+                        </div>
+                        {{end}}
                         {{else}}
                         <p class="blog-empty">Sem tags ainda.</p>
                         {{end}}
                     </section>
                     <section class="blog-widget">
-                        <h2>Por mês</h2>
-                        {{if .Months}}
-                        <ul class="blog-months">
-                            {{range .Months}}
-                            <li><a class="{{if .Active}}active{{end}}"
-                                    href="{{blogURL 1 $.Q $.ActiveTag .Key}}">{{.Label}} ({{.Count}})</a></li>
-                            {{end}}
-                        </ul>
+                        <h2>Calendário</h2>
+                        {{if .Calendar}}
+                        <div class="blog-cal">
+                            <div class="blog-cal-head">
+                                {{if .Calendar.PrevURL}}
+                                <a class="blog-cal-nav" href="{{.Calendar.PrevURL}}" aria-label="Mês anterior"><i
+                                        class="fa-solid fa-chevron-left"></i></a>
+                                {{else}}
+                                <span class="blog-cal-nav disabled" aria-label="Mês anterior"><i
+                                        class="fa-solid fa-chevron-left"></i></span>
+                                {{end}}
+                                <span class="blog-cal-title">
+                                    <button type="button" class="blog-cal-month-btn" aria-haspopup="dialog"
+                                        aria-label="Escolher mês">{{.Calendar.MonthName}}</button>
+                                    <button type="button" class="blog-cal-year-btn" aria-haspopup="dialog"
+                                        aria-label="Escolher ano">{{.Calendar.Year}}</button>
+                                </span>
+                                {{if .Calendar.NextURL}}
+                                <a class="blog-cal-nav" href="{{.Calendar.NextURL}}" aria-label="Próximo mês"><i
+                                        class="fa-solid fa-chevron-right"></i></a>
+                                {{else}}
+                                <span class="blog-cal-nav disabled" aria-label="Próximo mês"><i
+                                        class="fa-solid fa-chevron-right"></i></span>
+                                {{end}}
+                            </div>
+                            <div class="blog-cal-weekdays">
+                                <span title="Domingo">D</span><span title="Segunda">S</span><span
+                                    title="Terça">T</span><span title="Quarta">Q</span><span
+                                    title="Quinta">Q</span><span title="Sexta">S</span><span title="Sábado">S</span>
+                            </div>
+                            <div class="blog-cal-grid">
+                                {{range .Calendar.Days}}
+                                {{if .HasPost}}
+                                <a class="blog-cal-day has-post{{if .Active}} active{{end}}"
+                                    href="{{if .Active}}{{blogURL 1 $.Q $.ActiveTag "" $.Calendar.MonthKey}}{{else}}{{blogURL 1 $.Q $.ActiveTag .DateKey $.Calendar.MonthKey}}{{end}}"
+                                    style="--c: {{.Color}}"
+                                    title="{{.Count}} post{{if gt .Count 1}}s{{end}}">{{.Day}}</a>
+                                {{else if eq .Day 0}}
+                                <span class="blog-cal-day blank"></span>
+                                {{else if .Future}}
+                                <span class="blog-cal-day future">{{.Day}}</span>
+                                {{else}}
+                                <span class="blog-cal-day">{{.Day}}</span>
+                                {{end}}
+                                {{end}}
+                            </div>
+                        </div>
+                        <div class="blog-cal-pop" data-for="month" role="dialog" aria-modal="true">
+                            <div class="blog-cal-pop-panel">
+                                <div class="blog-cal-pop-head">
+                                    <h3>Escolher mês</h3>
+                                    <button type="button" class="blog-tags-close" aria-label="Fechar"><i
+                                            class="fa-solid fa-xmark"></i></button>
+                                </div>
+                                <div class="blog-cal-months">
+                                    {{range .Calendar.Months}}
+                                    <a class="blog-cal-opt{{if .Active}} active{{end}}" href="{{.URL}}">{{.Label}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="blog-cal-pop" data-for="year" role="dialog" aria-modal="true">
+                            <div class="blog-cal-pop-panel">
+                                <div class="blog-cal-pop-head">
+                                    <h3>Escolher ano</h3>
+                                    <button type="button" class="blog-tags-close" aria-label="Fechar"><i
+                                            class="fa-solid fa-xmark"></i></button>
+                                </div>
+                                <div class="blog-cal-years">
+                                    {{range .Calendar.Years}}
+                                    <a class="blog-cal-opt{{if .Active}} active{{end}}" href="{{.URL}}">{{.Label}}</a>
+                                    {{end}}
+                                </div>
+                            </div>
+                        </div>
                         {{else}}
                         <p class="blog-empty">Sem posts.</p>
                         {{end}}
@@ -204,7 +318,7 @@
             {{else}}
             <!-- Visão da Home Page -->
             <div style="display: flex; flex-direction: column;">
-                <h1>Olá, mundo!</h1>
+                <h1>Olá, <span id="world">Mundo</span>!</h1>
                 <p style="padding-top: 1em;">
                     Me chamo <span style="color: coral; font-size: large;">Rhuan Emanuel</span>, seja bem-vindo ao meu
                     portfolio.
@@ -308,11 +422,19 @@
             initScrollShadows();
             initPostPreview();
             initPostTooltip();
+            initTagsPanel();
+            initCalPicker();
         }
 
         document.addEventListener('DOMContentLoaded', initPostPage);
         window.initPostPage = initPostPage;
         setInterval(initRelativeDates, 60000);
+
+        // Registra o ciclo de vida para fragmentos carregados via HTMX (ex: Last.fm)
+        document.addEventListener('htmx:afterSettle', function (evt) {
+            initRelativeDates();
+            if (window.initPostPage) window.initPostPage();
+        });
 
         function relativeTime(iso) {
             var then = new Date(iso);
@@ -457,6 +579,91 @@
             });
         }
 
+        function initTagsPanel() {
+            var panel = document.querySelector('.blog-tags-panel');
+            if (!panel || panel.dataset.wired) return;
+            panel.dataset.wired = '1';
+
+            var btn = document.querySelector('.blog-tags-more');
+            if (btn) {
+                btn.addEventListener('click', function () { panel.classList.add('show'); });
+            }
+
+            panel.addEventListener('click', function (e) {
+                if (e.target.closest('.blog-tags-close') || e.target === panel) {
+                    panel.classList.remove('show');
+                }
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') {
+                    document.querySelectorAll('.blog-tags-panel.show').forEach(function (p) {
+                        p.classList.remove('show');
+                    });
+                }
+            });
+        }
+
+        function initCalPicker() {
+            var cal = document.querySelector('.blog-cal');
+            if (!cal || cal.dataset.wired) return;
+            cal.dataset.wired = '1';
+
+            // Os overlays ficam fora de .blog-cal (irmãos dentro do widget).
+            var pops = Array.prototype.slice.call(document.querySelectorAll('.blog-cal-pop'));
+            var monthBtn = cal.querySelector('.blog-cal-month-btn');
+            var yearBtn = cal.querySelector('.blog-cal-year-btn');
+
+            function popFor(name) {
+                for (var i = 0; i < pops.length; i++) {
+                    if (pops[i].dataset.for === name) return pops[i];
+                }
+                return null;
+            }
+
+            function open(pop) {
+                pops.forEach(function (p) { p.classList.toggle('show', p === pop); });
+            }
+
+            if (monthBtn) {
+                monthBtn.addEventListener('click', function () {
+                    open(popFor('month'));
+                });
+            }
+            if (yearBtn) {
+                yearBtn.addEventListener('click', function () {
+                    open(popFor('year'));
+                });
+            }
+
+            function closeAll() {
+                pops.forEach(function (p) { p.classList.remove('show'); });
+            }
+
+            pops.forEach(function (p) {
+                p.addEventListener('click', function (e) {
+                    if (e.target === p || e.target.closest('a') || e.target.closest('.blog-tags-close')) {
+                        p.classList.remove('show');
+                    }
+                });
+            });
+
+            // O aside persiste entre navegações SPA; fecha o popover em qualquer
+            // clique fora dele e dos botões (ex: setas do calendário).
+            document.addEventListener('click', function (e) {
+                if (e.target.closest('.blog-cal-pop') ||
+                    e.target.closest('.blog-cal-month-btn') ||
+                    e.target.closest('.blog-cal-year-btn')) {
+                    return;
+                }
+                closeAll();
+            });
+
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape') closeAll();
+            });
+        }
+
         function initScrollShadows() {
             var scroller = document.querySelector('.container-read .post-content');
             if (!scroller) return;
@@ -517,6 +724,7 @@
         }
     </script>
     <script type="module" src="/scripts/spa.js"></script>
+    <script src="/scripts/worldEasterEgg.js"></script>
 </body>
 
 </html>

@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 
@@ -108,11 +109,32 @@ type BlogTag struct {
 	Active bool
 }
 
-type BlogMonth struct {
+type CalDay struct {
+	Day     int
+	Count   int
+	HasPost bool
+	Active  bool
+	Future  bool
+	DateKey string
+	Color   string
+}
+
+type CalOption struct {
 	Key    string
 	Label  string
-	Count  int
+	URL    string
 	Active bool
+}
+
+type CalMonth struct {
+	MonthName string
+	Year      int
+	MonthKey  string
+	Days      []CalDay
+	Months    []CalOption
+	Years     []CalOption
+	PrevURL   string
+	NextURL   string
 }
 
 type PageData struct {
@@ -131,9 +153,11 @@ type PageData struct {
 	Pages        []int
 	Q            string
 	ActiveTag    string
-	ActiveMonth  string
+	ActiveCal    string
+	ActiveDay    string
 	Tags         []BlogTag
-	Months       []BlogMonth
+	AllTags      []BlogTag
+	Calendar     *CalMonth
 }
 
 type CodeBlockMeta struct {
@@ -210,7 +234,7 @@ func Server(port int) {
 			}
 
 			dateISO, dateTooltip := formatPostDates(fm.Date)
-			post := Post{Title: title, Slug: slug, Date: fm.Date, DateISO: dateISO, DateTooltip: dateTooltip, Author: fm.Author, Thumbnail: fm.Thumbnail, ReadTime: estimateReadTime(mdContent), File: fileName, Content: template.HTML(htmlFinal)}
+			post := Post{Title: title, Slug: slug, Date: fm.Date, DateISO: dateISO, DateTooltip: dateTooltip, Author: fm.Author, Thumbnail: fm.Thumbnail, ReadTime: estimateReadTime(mdContent), File: fileName, Tags: fm.Tags, Content: template.HTML(htmlFinal)}
 
 			var prevPost, nextPost *Post
 			if all, err := listPosts("posts"); err == nil {
@@ -252,6 +276,7 @@ func Server(port int) {
 // --- Blog ---
 const blogFirstPageSize = 5
 const blogPageSize = 6
+const blogSidebarTagLimit = 6
 
 var ptBRMonths = [...]string{
 	"janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -268,20 +293,22 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	tag := strings.TrimSpace(r.URL.Query().Get("tag"))
 	month := strings.TrimSpace(r.URL.Query().Get("m"))
+	cal := strings.TrimSpace(r.URL.Query().Get("cal"))
 
 	// Agregações a partir do conjunto completo
 	tagCounts := map[string]int{}
-	monthCounts := map[string]int{}
+	dayCounts := map[string]int{}
 	for _, p := range all {
 		for _, t := range p.Tags {
 			tagCounts[t]++
 		}
-		if k := postMonthKey(p); k != "" {
-			monthCounts[k]++
+		if k := postDayKey(p); k != "" {
+			dayCounts[k]++
 		}
 	}
 
-	// Filtros combináveis
+	// Filtros: q, tag e dia (m=YYYY-MM-DD).
+	// Navegação do calendário (cal=YYYY-MM) NÃO filtra posts.
 	qLower := strings.ToLower(q)
 	var filtered []Post
 	for _, p := range all {
@@ -291,7 +318,7 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		if tag != "" && !containsTag(p.Tags, tag) {
 			continue
 		}
-		if month != "" && postMonthKey(p) != month {
+		if len(month) == 10 && postDayKey(p) != month {
 			continue
 		}
 		filtered = append(filtered, p)
@@ -355,7 +382,7 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		nextPage = page + 1
 	}
 
-	// Tags ordenadas alfabeticamente
+	// Tags em ordem alfabética, em lista simples
 	tagNames := make([]string, 0, len(tagCounts))
 	for name := range tagCounts {
 		tagNames = append(tagNames, name)
@@ -363,19 +390,73 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 	sort.Strings(tagNames)
 	var blogTags []BlogTag
 	for _, name := range tagNames {
-		blogTags = append(blogTags, BlogTag{Name: name, Count: tagCounts[name], Active: name == tag})
+		blogTags = append(blogTags, BlogTag{
+			Name:   name,
+			Count:  tagCounts[name],
+			Active: name == tag,
+		})
 	}
 
-	// Meses em ordem decrescente
-	monthKeys := make([]string, 0, len(monthCounts))
-	for k := range monthCounts {
-		monthKeys = append(monthKeys, k)
+	// Sidebar mostra no máximo blogSidebarTagLimit tags (as mais usadas, desempate alfabético);
+	// o modal "ver mais" lista todas. Ordem determinística.
+	shownTags := blogTags
+	if len(blogTags) > blogSidebarTagLimit {
+		sorted := make([]BlogTag, len(blogTags))
+		copy(sorted, blogTags)
+		sort.Slice(sorted, func(i, j int) bool {
+			if sorted[i].Count != sorted[j].Count {
+				return sorted[i].Count > sorted[j].Count
+			}
+			return sorted[i].Name < sorted[j].Name
+		})
+		shownTags = sorted[:blogSidebarTagLimit]
+		// Garante que a tag ativa (se houver) aparece na sidebar, sem duplicar.
+		for _, bt := range blogTags {
+			if !bt.Active {
+				continue
+			}
+			dup := false
+			for _, st := range shownTags {
+				if st.Name == bt.Name {
+					dup = true
+					break
+				}
+			}
+			if !dup {
+				shownTags[len(shownTags)-1] = bt
+			}
+			break
+		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(monthKeys)))
-	var blogMonths []BlogMonth
-	for _, k := range monthKeys {
-		blogMonths = append(blogMonths, BlogMonth{Key: k, Label: monthLabel(k), Count: monthCounts[k], Active: k == month})
+
+	// Calendário: mês exibido = param cal (senão, mês do post mais recente).
+	// O filtro de dia (m=YYYY-MM-DD) é independente do mês exibido no calendário.
+	displayYear, displayMonth := latestPostYearMonth(all)
+	if cal != "" {
+		if y, m, ok := parseYearMonth(cal); ok {
+			displayYear, displayMonth = y, m
+		}
 	}
+
+	// Mês mais antigo com post: limite mínimo para a navegação do calendário.
+	minKey := time.Now().Format("2006-01")
+	for _, p := range all {
+		if k := postMonthKey(p); k != "" && k < minKey {
+			minKey = k
+		}
+	}
+
+	activeDay := ""
+	if len(month) == 10 {
+		activeDay = month
+	}
+	activeCal := cal
+	if activeCal == "" {
+		y, m := latestPostYearMonth(all)
+		activeCal = fmt.Sprintf("%04d-%02d", y, int(m))
+	}
+
+	calendar := buildCalendar(dayCounts, displayYear, displayMonth, month, q, tag, minKey)
 
 	renderTemplate(w, PageData{
 		IsBlogView:   true,
@@ -388,10 +469,182 @@ func blogHandler(w http.ResponseWriter, r *http.Request) {
 		Pages:        pages,
 		Q:            q,
 		ActiveTag:    tag,
-		ActiveMonth:  month,
-		Tags:         blogTags,
-		Months:       blogMonths,
+		ActiveCal:    activeCal,
+		ActiveDay:    activeDay,
+		Tags:         shownTags,
+		AllTags:      blogTags,
+		Calendar:     calendar,
 	})
+}
+
+func postDayKey(p Post) string {
+	if len(p.DateISO) >= 10 {
+		return p.DateISO[:10]
+	}
+	return ""
+}
+
+func latestPostYearMonth(all []Post) (int, time.Month) {
+	latest := ""
+	for _, p := range all {
+		if k := postMonthKey(p); k != "" && k > latest {
+			latest = k
+		}
+	}
+	if y, m, ok := parseYearMonth(latest); ok {
+		return y, m
+	}
+	now := time.Now()
+	return now.Year(), now.Month()
+}
+
+func parseYearMonth(key string) (int, time.Month, bool) {
+	if len(key) != 7 {
+		return 0, 0, false
+	}
+	y, err := strconv.Atoi(key[:4])
+	if err != nil {
+		return 0, 0, false
+	}
+	m, err := strconv.Atoi(key[5:])
+	if err != nil || m < 1 || m > 12 {
+		return 0, 0, false
+	}
+	return y, time.Month(m), true
+}
+
+func buildCalendar(dayCounts map[string]int, year int, month time.Month, activeMonth, q, tag string, minKey string) *CalMonth {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, time.UTC)
+	daysInMonth := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
+	offset := int(first.Weekday())
+
+	now := time.Now()
+	todayKey := now.Format("2006-01-02")
+	currentMonthKey := now.Format("2006-01")
+	currentYear := now.Year()
+	currentMonth := now.Month()
+
+	minYear, minMonth := currentYear, currentMonth
+	if y, m, ok := parseYearMonth(minKey); ok {
+		minYear, minMonth = y, m
+	}
+
+	monthKey := fmt.Sprintf("%04d-%02d", year, month)
+
+	// Filtro de dia (m=YYYY-MM-DD) preservado na navegação do calendário.
+	dayFilter := ""
+	if len(activeMonth) == 10 {
+		dayFilter = activeMonth
+	}
+
+	var days []CalDay
+	for i := 0; i < offset; i++ {
+		days = append(days, CalDay{})
+	}
+	for d := 1; d <= daysInMonth; d++ {
+		key := fmt.Sprintf("%04d-%02d-%02d", year, month, d)
+		count := dayCounts[key]
+		hasPost := count > 0
+		future := key > todayKey
+		if future {
+			// Dias futuros não são navegáveis nem destacados.
+			hasPost = false
+			count = 0
+		}
+		days = append(days, CalDay{
+			Day:     d,
+			Count:   count,
+			HasPost: hasPost,
+			Active:  key == activeMonth,
+			Future:  future,
+			DateKey: key,
+			Color:   colorForDay(key),
+		})
+	}
+	// Padding fixo para 6 semanas (42 células): altura constante do calendário.
+	const calCells = 42
+	for len(days) < calCells {
+		days = append(days, CalDay{})
+	}
+
+	// Seletor de mês: só oferece meses entre o mês do post mais antigo e o mês atual.
+	minMonthOpt := 1
+	if year == minYear {
+		minMonthOpt = int(minMonth)
+	}
+	maxMonth := 12
+	if year == currentYear {
+		maxMonth = int(currentMonth)
+	}
+	var months []CalOption
+	for m := minMonthOpt; m <= maxMonth; m++ {
+		mk := fmt.Sprintf("%02d", m)
+		months = append(months, CalOption{
+			Key:    mk,
+			Label:  ptBRMonths[m-1],
+			Active: m == int(month),
+			URL:    blogURL(1, q, tag, dayFilter, fmt.Sprintf("%04d-%02d", year, m)),
+		})
+	}
+
+	// Seletor de ano: do atual descendo até o ano do post mais antigo.
+	// Mantém o mês exibido, sem nunca ultrapassar o mês do post mais antigo
+	// nem o mês atual.
+	var years []CalOption
+	for y := currentYear; y >= minYear; y-- {
+		targetMonth := int(month)
+		if y == minYear && targetMonth < int(minMonth) {
+			targetMonth = int(minMonth)
+		}
+		if y == currentYear && targetMonth > int(currentMonth) {
+			targetMonth = int(currentMonth)
+		}
+		years = append(years, CalOption{
+			Key:    fmt.Sprintf("%d", y),
+			Label:  fmt.Sprintf("%d", y),
+			Active: y == year,
+			URL:    blogURL(1, q, tag, dayFilter, fmt.Sprintf("%04d-%02d", y, targetMonth)),
+		})
+	}
+
+	prev := time.Date(year, month-1, 1, 0, 0, 0, 0, time.UTC)
+	next := time.Date(year, month+1, 1, 0, 0, 0, 0, time.UTC)
+
+	nextURL := ""
+	if nextMonthKey := fmt.Sprintf("%04d-%02d", next.Year(), next.Month()); nextMonthKey <= currentMonthKey {
+		nextURL = blogURL(1, q, tag, dayFilter, nextMonthKey)
+	}
+
+	prevURL := ""
+	if prevMonthKey := fmt.Sprintf("%04d-%02d", prev.Year(), prev.Month()); prevMonthKey >= minKey {
+		prevURL = blogURL(1, q, tag, dayFilter, prevMonthKey)
+	}
+
+	return &CalMonth{
+		MonthName: strings.Title(ptBRMonths[month-1]),
+		Year:      year,
+		MonthKey:  monthKey,
+		Days:      days,
+		Months:    months,
+		Years:     years,
+		PrevURL:   prevURL,
+		NextURL:   nextURL,
+	}
+}
+
+// Paleta no tema github-dark; a cor do dia é derivada por hash estável da data.
+var githubDarkPalette = []string{
+	"#ff7b72", "#ffa657", "#e3b341", "#7ee787",
+	"#79c0ff", "#d2a8ff", "#ff85e1", "#a5d6ff",
+}
+
+func colorForDay(key string) string {
+	var h uint32 = 2166136261
+	for i := 0; i < len(key); i++ {
+		h ^= uint32(key[i])
+		h *= 16777619
+	}
+	return githubDarkPalette[int(h)%len(githubDarkPalette)]
 }
 
 func postMonthKey(p Post) string {
@@ -399,18 +652,6 @@ func postMonthKey(p Post) string {
 		return p.DateISO[:7]
 	}
 	return ""
-}
-
-func monthLabel(key string) string {
-	if len(key) != 7 {
-		return key
-	}
-	year := key[:4]
-	m, err := strconv.Atoi(key[5:])
-	if err != nil || m < 1 || m > 12 {
-		return key
-	}
-	return strings.Title(ptBRMonths[m-1]) + " " + year
 }
 
 func containsTag(tags []string, target string) bool {
@@ -422,7 +663,7 @@ func containsTag(tags []string, target string) bool {
 	return false
 }
 
-func blogURL(page int, q, tag, month string) string {
+func blogURL(page int, q, tag, m, cal string) string {
 	params := url.Values{}
 	if page > 1 {
 		params.Set("page", strconv.Itoa(page))
@@ -433,8 +674,11 @@ func blogURL(page int, q, tag, month string) string {
 	if tag != "" {
 		params.Set("tag", tag)
 	}
-	if month != "" {
-		params.Set("m", month)
+	if m != "" {
+		params.Set("m", m)
+	}
+	if cal != "" {
+		params.Set("cal", cal)
 	}
 	if len(params) == 0 {
 		return "/blog"
@@ -443,6 +687,47 @@ func blogURL(page int, q, tag, month string) string {
 }
 
 // --- Lógica Last.fm ---
+// Cache da lista de músicas recentes: evita re-buscar a API a cada tick de 15s e
+// mantém o mapeamento index -> música estável durante a janela do TTL.
+var (
+	trackListMu    sync.Mutex
+	trackListCache []SongInfo
+	trackListTime  time.Time
+)
+
+const trackListTTL = 2 * time.Minute
+
+func getTrackList(user, key string) ([]SongInfo, bool) {
+	trackListMu.Lock()
+	defer trackListMu.Unlock()
+
+	now := time.Now()
+	if len(trackListCache) > 0 && now.Before(trackListTime.Add(trackListTTL)) {
+		return trackListCache, true
+	}
+
+	tracks, err := fetchLastFmTracks(user, key)
+	if err != nil {
+		if len(trackListCache) > 0 {
+			fmt.Printf("⚠️ Falha ao atualizar músicas do Last.fm (%v); usando dados em cache\n", err)
+			return trackListCache, true
+		}
+		return nil, false
+	}
+
+	if len(tracks) == 0 {
+		if len(trackListCache) > 0 {
+			return trackListCache, true
+		}
+		fmt.Println("⚠️ Nenhuma música retornado pelo Last.fm")
+		return nil, false
+	}
+
+	trackListCache = tracks
+	trackListTime = now
+	return tracks, true
+}
+
 func lastFmHandler(w http.ResponseWriter, r *http.Request) {
 	idxStr := r.URL.Query().Get("index")
 	index := 0
@@ -459,15 +744,10 @@ func lastFmHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tracks, err := fetchLastFmTracks(user, key)
-	if err != nil {
-		fmt.Printf("❌ Erro ao buscar músicas do Last.fm: %v\n", err)
+	tracks, ok := getTrackList(user, key)
+	if !ok {
+		fmt.Println("❌ Erro ao buscar músicas do Last.fm: sem dados em cache")
 		http.Error(w, "Erro ao carregar músicas", http.StatusInternalServerError)
-		return
-	}
-
-	if len(tracks) == 0 {
-		fmt.Println("⚠️ Nenhuma música retornado pelo Last.fm")
 		return
 	}
 
@@ -478,7 +758,7 @@ func lastFmHandler(w http.ResponseWriter, r *http.Request) {
     <div class="song-card fade-in" 
          hx-get="/api/lastfm-widget?index={{.Next}}" 
          hx-trigger="every 15s" 
-         hx-swap="outerHTML transition:true">
+         hx-swap="outerHTML">
         <img src="{{.Song.CoverURL}}" width="80" style="border-radius: 4px;">
         <div class="info">
             <div class="title">{{.Song.Title}}</div>
@@ -501,18 +781,20 @@ func fetchLastFmTracks(username, apiKey string) ([]SongInfo, error) {
 	u.Add("extended", "1")
 
 	resp, err := http.Get("https://ws.audioscrobbler.com/2.0/?" + u.Encode())
-	if err != nil || resp.StatusCode != 200 {
-		return nil, fmt.Errorf("api error")
+	if err != nil {
+		return nil, fmt.Errorf("erro de rede: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		return nil, fmt.Errorf("status inesperado da API Last.fm: %d", resp.StatusCode)
 	}
 	defer resp.Body.Close()
 
 	bodyBytes, _ := io.ReadAll(resp.Body)
 
-	resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
 	var res LastFmResponse
-	if err := json.NewDecoder(resp.Body).Decode(&res); err != nil {
-		return nil, err
+	if err := json.Unmarshal(bodyBytes, &res); err != nil {
+		return nil, fmt.Errorf("erro ao decodificar resposta: %w", err)
 	}
 
 	if len(res.RecentTracks.Track) == 0 {
@@ -1012,7 +1294,7 @@ func getIconForLang(lang string) string {
 }
 
 var indexTmpl = template.Must(template.New("index.html").
-	Funcs(template.FuncMap{"blogURL": blogURL}).
+	Funcs(template.FuncMap{"blogURL": blogURL, "sub": func(a, b int) int { return a - b }}).
 	ParseFiles("index.html"))
 
 func renderTemplate(w http.ResponseWriter, data PageData) {

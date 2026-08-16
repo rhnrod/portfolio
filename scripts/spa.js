@@ -15,7 +15,7 @@ function run(anim, el, resetOrigin) {
             const i = running.indexOf(entry);
             if (i !== -1) running.splice(i, 1);
         })
-        .catch(() => {});
+        .catch(() => { });
 }
 
 function stopAll() {
@@ -132,6 +132,10 @@ async function navigate(path, { push = true, force = false } = {}) {
     main.className = newMain.className;
     contentDiv.replaceWith(document.importNode(newContent, true));
     document.title = doc.title || document.title;
+
+    if (!nowRead && typeof worldEasterEgg === "function") {
+        worldEasterEgg();
+    }
 
     // FLIP só quando atravessa home <-> post. Post->post e home->home trocam instantâneo.
     if (!reduceMotion && aside && before && nowRead !== wasRead) {
